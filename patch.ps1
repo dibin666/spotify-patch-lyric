@@ -26,7 +26,7 @@ $ProgressPreference = 'SilentlyContinue'
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-$Repo = 'dibin666/spotify-patch-lryic'
+$Repo = 'dibin666/spotify-patch-lyric'
 $Root = $PSScriptRoot
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 $Version = ([IO.File]::ReadAllText((Join-Path $Root 'VERSION'), $Utf8)).Trim()

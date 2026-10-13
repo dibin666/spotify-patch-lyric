@@ -15,7 +15,7 @@
 # setsid, associative arrays, mapfile or ${x,,}.
 set -Eeuo pipefail
 
-REPO=dibin666/spotify-patch-lryic
+REPO=dibin666/spotify-patch-lyric
 ROOT=""
 if [[ -n ${BASH_SOURCE[0]:-} && -f ${BASH_SOURCE[0]} ]]; then ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"; fi
 

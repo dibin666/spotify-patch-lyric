@@ -17,8 +17,8 @@ import (
 	"path/filepath"
 	"runtime"
 
-	spotlyric "github.com/dibin666/spotify-patch-lryic"
-	"github.com/dibin666/spotify-patch-lryic/server"
+	spotlyric "github.com/dibin666/spotify-patch-lyric"
+	"github.com/dibin666/spotify-patch-lyric/server"
 )
 
 func main() {
