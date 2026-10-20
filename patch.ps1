@@ -27,6 +27,8 @@ Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $Repo = 'dibin666/spotify-patch-lyric'
+# Install / update endpoint (worker/): serves install.sh / install.ps1 and the latest release.
+$Site = if ($env:SPOT_LYRIC_SITE) { $env:SPOT_LYRIC_SITE.TrimEnd('/') } else { 'https://lyric.564616.xyz' }
 $Root = $PSScriptRoot
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 $Version = ([IO.File]::ReadAllText((Join-Path $Root 'VERSION'), $Utf8)).Trim()
@@ -57,6 +59,8 @@ Spot-Lyric for Spotify v$Version（Windows；macOS / Linux 运行 ./patch.sh，�
 
 命令:
   install      安装 / 更新（默认）：分步选择使用方式，注入插件并完成相应设置
+  update       更新：沿用上次的设置，不询问（未安装过时同 install）
+  setup        重新设置：重新选择使用方式、歌词服务器和请求方式
   apply        只注入插件（沿用上次选择的使用方式）
   status       查看 Spotify、补丁、使用方式和服务状态
   restore      还原 Spotify 原始文件
@@ -98,7 +102,7 @@ for ($i = 0; $i -lt $argv.Count; $i++) {
     if (-not $arg.StartsWith('-')) {
         if ($Command) { Show-Usage; Fail "多余的参数：$arg" }
         switch ($arg.ToLower()) {
-            { $_ -in 'install', 'apply', 'restore', 'uninstall', 'status', 'hook', 'unhook' } { $Command = $_ }
+            { $_ -in 'install', 'update', 'setup', 'apply', 'restore', 'uninstall', 'status', 'hook', 'unhook' } { $Command = $_ }
             'help' { Show-Usage; exit 0 }
             'version' { Write-Output $Version; exit 0 }
             default { Show-Usage; Fail "未知命令：$arg" }
@@ -220,7 +224,7 @@ function Get-SpotifyVersion([string]$Dir) {
 function Get-Bundle([string]$M, [string]$S, [string]$R) {
     $core = [IO.File]::ReadAllText((Join-Path $Root 'src\core.js'), $Utf8)
     $app = [IO.File]::ReadAllText((Join-Path $Root 'src\app.js'), $Utf8)
-    $app = $app.Replace('__SPOT_LYRIC_VERSION__', $Version).Replace('__SPOT_LYRIC_SERVER__', $S).Replace('__SPOT_LYRIC_MODE__', $M).Replace('__SPOT_LYRIC_REQUEST__', $R).Replace('__SPOT_LYRIC_LOCAL__', $LocalUrl)
+    $app = $app.Replace('__SPOT_LYRIC_VERSION__', $Version).Replace('__SPOT_LYRIC_SERVER__', $S).Replace('__SPOT_LYRIC_MODE__', $M).Replace('__SPOT_LYRIC_REQUEST__', $R).Replace('__SPOT_LYRIC_LOCAL__', $LocalUrl).Replace('__SPOT_LYRIC_SITE__', $Site)
     $js = "/* Spot-Lyric for Spotify v$Version - generated, do not edit */`n" + $core + "`n" + $app
     $css = [IO.File]::ReadAllText((Join-Path $Root 'src\app.css'), $Utf8)
     $jsBytes = $Utf8.GetBytes($js)
@@ -656,10 +660,7 @@ function Get-QuickPlan {
         @{ Key = 'update'; Label = "更新到 v$Version（沿用当前设置）"; Hint = $summary },
         @{ Key = 'setup'; Label = '重新设置'; Hint = '重新选择使用方式、歌词服务器和请求方式' },
         @{ Key = 'uninstall'; Label = '卸载'; Hint = '还原 Spotify，并移除钩子、本地服务和直连启动参数' })
-    if ($action -eq 'update') {
-        Write-Host ''
-        return @{ Action = 'update'; Mode = $CfgMode; Request = $req; Server = (Get-CurrentServer); Hook = [bool](Test-HookInstalled) }
-    }
+    if ($action -eq 'update') { Write-Host ''; return (Get-UpdatePlan) }
     if ($action -eq 'uninstall') {
         Write-Host ''
         if (-not (Confirm-Choice '确定卸载 Spot-Lyric' $false)) { Fail '已取消，没有做任何修改' }
@@ -669,9 +670,22 @@ function Get-QuickPlan {
     return $null
 }
 
+# Update with the recorded choices (also the hook's state), nothing asked.
+function Get-UpdatePlan {
+    @{ Action = 'update'; Mode = $CfgMode; Request = (Get-CurrentRequest $CfgMode); Server = (Get-CurrentServer); Hook = [bool](Test-HookInstalled) }
+}
+
 function Get-Plan {
-    $quick = Get-QuickPlan
-    if ($quick) { return $quick }
+    # update: the recorded choices unless options ask for something else; not installed yet: the wizard.
+    if ($Command -eq 'update') {
+        if ($CfgMode -and -not ($Mode -or $Request -or $Server -or $Hook)) { return (Get-UpdatePlan) }
+        if (-not $CfgMode) { Say '尚未安装，进入安装向导' }
+    }
+    # setup: every step again, without the update / setup / uninstall menu.
+    if ($Command -eq 'install') {
+        $quick = Get-QuickPlan
+        if ($quick) { return $quick }
+    }
     $p = @{ Action = 'install'; Mode = $Mode; Request = ''; Server = (Get-CurrentServer); Hook = $false }
     if (-not $p.Mode -and ($Server -or $Request -eq 'server')) { $p.Mode = 'cloud' }
     $current = Get-CurrentMode
@@ -794,7 +808,7 @@ function Invoke-RestoreCommand([string]$Cmd) {
 }
 
 switch ($Command) {
-    'install' {
+    { $_ -in 'install', 'update', 'setup' } {
         if (-not $Script:Quiet) { Write-Host "Spot-Lyric for Spotify v$Version"; Write-Host "系统：Windows（$env:PROCESSOR_ARCHITECTURE）" }
         $dir = Get-SpotifyDir
         if (-not $Script:Quiet) {
@@ -813,12 +827,12 @@ switch ($Command) {
         if ($plan.Hook) { Install-Hook $plan.Mode $plan.Server $plan.Request $dir } elseif (Test-HookInstalled) { Remove-Hook }
         Save-Config $plan.Mode $plan.Server $plan.Request
         Invoke-Restart $dir $changed $r.Stopped
-        if ($plan.Action -eq 'update') { Say '完成！以后想更换使用方式，重新运行本脚本并选择「重新设置」。' }
+        if ($plan.Action -eq 'update') { Say "完成！已更新到 v$Version（$(Mode-Name $plan.Mode)）。想更换使用方式：spot-lyric setup" }
         else {
             if ($plan.Mode -eq 'cloud') { Say '完成！在 Spotify 底部播放栏（官方歌词按钮左侧）点击新的歌词图标打开歌词页；旁边的小箭头可把当前歌词上传到服务器。' }
             else { Say '完成！纯本地模式：不连接任何远程服务器。在 Spotify 底部播放栏（官方歌词按钮左侧）点击新的歌词图标打开歌词页。' }
-            if ($plan.Mode -eq 'cloud') { Say "网易云 / QQ 请求：$(Request-Name $plan.Request)。以后想更换方式，重新运行本脚本即可。" }
-            else { Say '以后想更换方式，重新运行本脚本即可。' }
+            if ($plan.Mode -eq 'cloud') { Say "网易云 / QQ 请求：$(Request-Name $plan.Request)。" }
+            Say '想更换使用方式：spot-lyric setup；有新版本时 Spotify 里的歌词按钮会提示。'
         }
     }
     'apply' {

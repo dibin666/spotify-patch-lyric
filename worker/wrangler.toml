@@ -1,0 +1,12 @@
+# Spot-Lyric install / update endpoint:  cd worker && npx wrangler deploy
+# The custom domain below must be a hostname in a zone of the Cloudflare account.
+name = "spot-lyric"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+routes = [
+  { pattern = "lyric.564616.xyz", custom_domain = true },
+]
+
+# Optional, raises the GitHub API rate limit for /latest:  npx wrangler secret put GITHUB_TOKEN

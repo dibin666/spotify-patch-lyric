@@ -2,3 +2,4 @@
 server/.env
 node_modules/
 *.log
+worker/.wrangler/

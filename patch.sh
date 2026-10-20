@@ -16,25 +16,28 @@
 set -Eeuo pipefail
 
 REPO=dibin666/spotify-patch-lyric
+# Install / update endpoint (worker/): serves install.sh / install.ps1 and the latest release.
+SITE="${SPOT_LYRIC_SITE:-https://lyric.564616.xyz}"
+SITE="${SITE%/}"
 ROOT=""
 if [[ -n ${BASH_SOURCE[0]:-} && -f ${BASH_SOURCE[0]} ]]; then ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"; fi
 
 # ------------------------------------------------------------ bootstrap ---
-# Run without a checkout (curl ... | bash): fetch the sources, then run them.
+# Run without a checkout (the old one-liner: curl .../patch.sh | bash): hand over to install.sh,
+# which installs the latest release and the spot-lyric command, then runs its patch.sh.
 if [[ -z $ROOT || ! -f $ROOT/src/app.js ]]; then
   tmp="$(mktemp -d)"
-  # Only the scripts and the plugin sources (a few hundred KB); the local service program is
-  # fetched later and only for the pure local mode.
-  printf '\033[1;32m[spot-lyric]\033[0m 获取最新的补丁脚本与歌词插件（github.com/%s）…\n' "$REPO" >&2
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "https://github.com/$REPO/archive/refs/heads/main.tar.gz" | tar xz -C "$tmp" --strip-components=1
-  else
-    wget -qO- "https://github.com/$REPO/archive/refs/heads/main.tar.gz" | tar xz -C "$tmp" --strip-components=1
-  fi
-  [[ -f $tmp/patch.sh ]] || { echo "[spot-lyric] 下载失败" >&2; exit 1; }
+  printf '\033[1;32m[spot-lyric]\033[0m 获取安装程序（%s）…\n' "$SITE" >&2
+  for url in "$SITE/install.sh" "https://raw.githubusercontent.com/$REPO/main/install.sh"; do
+    if command -v curl >/dev/null 2>&1; then curl -fsSL --connect-timeout 15 -o "$tmp/install.sh" "$url" 2>/dev/null || continue
+    else wget -q -T 30 -O "$tmp/install.sh" "$url" 2>/dev/null || continue; fi
+    grep -q 'spot-lyric' "$tmp/install.sh" 2>/dev/null && break
+    rm -f "$tmp/install.sh"
+  done
+  [[ -f $tmp/install.sh ]] || { echo "[spot-lyric] 下载失败，请检查网络后重试" >&2; exit 1; }
   # Prompts need the terminal even though this script arrived through a pipe.
-  if [[ ! -t 0 ]] && { : < /dev/tty; } 2>/dev/null; then exec bash "$tmp/patch.sh" "$@" < /dev/tty; fi
-  exec bash "$tmp/patch.sh" "$@"
+  if [[ ! -t 0 ]] && { : < /dev/tty; } 2>/dev/null; then exec bash "$tmp/install.sh" "$@" < /dev/tty; fi
+  exec bash "$tmp/install.sh" "$@"
 fi
 
 VERSION="$(tr -d ' \r\n' < "$ROOT/VERSION" 2>/dev/null || echo 0.0.0)"
@@ -57,6 +60,8 @@ Spot-Lyric for Spotify v${VERSION}（macOS / Linux；Windows 运行 patch.cmd，
 
 命令:
   install      安装 / 更新（默认）：分步选择使用方式，注入插件并完成相应设置
+  update       更新：沿用上次的设置，不询问（未安装过时同 install）
+  setup        重新设置：重新选择使用方式、歌词服务器和请求方式
   apply        只注入插件（沿用上次选择的使用方式）
   status       查看 Spotify、补丁、使用方式和服务状态
   restore      还原 Spotify 原始文件
@@ -107,7 +112,7 @@ while [[ $# -gt 0 ]]; do
   if [[ $arg != -* ]]; then
     [[ -z $COMMAND ]] || { usage >&2; die "多余的参数：$arg"; }
     case "$(printf '%s' "$arg" | tr 'A-Z' 'a-z')" in
-      install|apply|restore|uninstall|status|hook|unhook) COMMAND="$(printf '%s' "$arg" | tr 'A-Z' 'a-z')" ;;
+      install|update|setup|apply|restore|uninstall|status|hook|unhook) COMMAND="$(printf '%s' "$arg" | tr 'A-Z' 'a-z')" ;;
       help) usage; exit 0 ;;
       version) echo "$VERSION"; exit 0 ;;
       *) usage >&2; die "未知命令：$arg" ;;
@@ -304,7 +309,8 @@ build_bundle() {  # build_bundle OUT_DIR MODE SERVER REQUEST
     cat "$ROOT/src/core.js"
     printf '\n'
     sed -e "s/__SPOT_LYRIC_VERSION__/$VERSION/g" -e "s|__SPOT_LYRIC_SERVER__|$3|g" \
-        -e "s/__SPOT_LYRIC_MODE__/$2/g" -e "s/__SPOT_LYRIC_REQUEST__/$4/g" -e "s|__SPOT_LYRIC_LOCAL__|$LOCAL_URL|g" "$ROOT/src/app.js"
+        -e "s/__SPOT_LYRIC_MODE__/$2/g" -e "s/__SPOT_LYRIC_REQUEST__/$4/g" -e "s|__SPOT_LYRIC_LOCAL__|$LOCAL_URL|g" \
+        -e "s|__SPOT_LYRIC_SITE__|$SITE|g" "$ROOT/src/app.js"
   } > "$out/spot-lyric.js"
   cp "$ROOT/src/app.css" "$out/spot-lyric.css"
 }
@@ -914,19 +920,29 @@ quick_plan() {
     "setup|重新设置|重新选择使用方式、歌词服务器和请求方式|" \
     "uninstall|卸载|还原 Spotify，并移除钩子、本地服务和直连启动参数|"
   case "$CHOICE" in
-    update)
-      P_ACTION=update; P_MODE="$CFG_MODE"; P_SERVER="$(current_server)"; P_REQ="$req"
-      P_HOOK=0; hook_installed && P_HOOK=1
-      printf '\n'; return 0 ;;
+    update) update_plan; printf '\n'; return 0 ;;
     uninstall)
       printf '\n'; confirm "确定卸载 Spot-Lyric" n || die "已取消，没有做任何修改"
       P_ACTION=uninstall; printf '\n'; return 0 ;;
   esac
   return 1
 }
+# Update with the recorded choices (also the hooks' state), nothing asked.
+update_plan() {
+  P_ACTION=update; P_MODE="$CFG_MODE"; P_SERVER="$(current_server)"; P_REQ="$(current_request "$CFG_MODE")"
+  [[ $P_REQ == direct && $PLATFORM == macos ]] && P_REQ=server
+  P_HOOK=0; hook_installed && P_HOOK=1
+  return 0
+}
 make_plan() {
   local current current_req
-  quick_plan && return 0
+  # update: the recorded choices unless options ask for something else; not installed yet: the wizard.
+  if [[ $COMMAND == update ]]; then
+    if [[ -n $CFG_MODE && -z $MODE$REQUEST$SERVER$HOOK ]]; then update_plan; return 0; fi
+    [[ -n $CFG_MODE ]] || say "尚未安装，进入安装向导"
+  fi
+  # setup: every step again, without the update / setup / uninstall menu.
+  if [[ $COMMAND == install ]] && quick_plan; then return 0; fi
   P_MODE="$MODE"; P_SERVER="$(current_server)"
   [[ -z $P_MODE && ( -n $SERVER || $REQUEST == server ) ]] && P_MODE=cloud
   current="$(current_mode)"; current_req="$(current_request cloud)"
@@ -1020,7 +1036,7 @@ restore_cmd() {  # restore_cmd restore|uninstall
   restart_spotify "$changed"
 }
 case "$COMMAND" in
-  install)
+  install|update|setup)
     header; need_spotify; show_spotify
     make_plan
     [[ $P_ACTION == uninstall ]] && { restore_cmd uninstall; exit 0; }
@@ -1035,12 +1051,12 @@ case "$COMMAND" in
     if [[ $P_HOOK == 1 ]]; then install_hook "$P_MODE" "$P_SERVER" "$P_REQ"; elif hook_installed; then remove_hook; fi
     save_config "$P_MODE" "$P_SERVER" "$P_REQ"
     restart_spotify "$changed"
-    if [[ $P_ACTION == update ]]; then say "完成！以后想更换使用方式，重新运行本脚本并选择「重新设置」。"
+    if [[ $P_ACTION == update ]]; then say "完成！已更新到 v${VERSION}（$(mode_name "$P_MODE")）。想更换使用方式：spot-lyric setup"
     else
       if [[ $P_MODE == cloud ]]; then say "完成！在 Spotify 底部播放栏（官方歌词按钮左侧）点击新的歌词图标打开歌词页；旁边的小箭头可把当前歌词上传到服务器。"
       else say "完成！纯本地模式：不连接任何远程服务器。在 Spotify 底部播放栏（官方歌词按钮左侧）点击新的歌词图标打开歌词页。"; fi
-      if [[ $P_MODE == cloud ]]; then say "网易云 / QQ 请求：$(request_name "$P_REQ")。以后想更换方式，重新运行本脚本即可。"
-      else say "以后想更换方式，重新运行本脚本即可。"; fi
+      [[ $P_MODE == cloud ]] && say "网易云 / QQ 请求：$(request_name "$P_REQ")。"
+      say "想更换使用方式：spot-lyric setup；有新版本时 Spotify 里的歌词按钮会提示。"
     fi
     ;;
   apply)

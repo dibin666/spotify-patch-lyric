@@ -74,11 +74,14 @@ jobs:
       # The live test hits real NetEase / QQ APIs, which throttle datacenter addresses: run it locally.
       # server.test.mjs builds the Go server, so these also run for Go changes.
       - if: needs.changes.outputs.go == 'true' || needs.changes.outputs.plugin == 'true'
-        run: node --test tests/core.test.mjs tests/server.test.mjs tests/net.test.mjs
+        run: node --test tests/core.test.mjs tests/server.test.mjs tests/net.test.mjs tests/changelog.test.mjs
         env: { SPOT_LYRIC_OFFLINE: '1' }
       # patch.sh (pure sh, python / zip / unzip shadowed) and patch.ps1 (pwsh) on a synthetic xpui.spa.
       - if: needs.changes.outputs.scripts == 'true'
         run: bash tests/patch_test.sh
+      # install.sh (the spot-lyric command) against a local stand-in for the update site.
+      - if: needs.changes.outputs.scripts == 'true'
+        run: bash tests/install_test.sh
 
   # The patch scripts on their own systems: macOS with its bash 3.2, Windows PowerShell 5.1.
   patch-macos:
@@ -89,6 +92,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: bash tests/patch_test.sh
         env: { BASH_BIN: /bin/bash, PWSH: '' }
+      - run: /bin/bash tests/install_test.sh
   patch-windows:
     needs: changes
     if: needs.changes.outputs.scripts == 'true'
@@ -96,6 +100,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\patch_test.ps1
+      - run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\install_test.ps1
 
   # spot-lyric-server (lyrics server / local service of pure local mode) for every system,
   # each built and tested on a native runner of its own system / architecture.
@@ -158,9 +163,14 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
             echo "tag $GITHUB_REF_NAME does not match VERSION ($tag)"; exit 1
           fi
-          if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --target "$GITHUB_SHA" --title "Spot-Lyric $tag" \
-              --notes "spot-lyric-server for Windows / macOS / Linux: the local service of pure local mode (installed by patch.sh / patch.cmd with --mode local) and the lyrics server. See README."
+          # The release body is the version's CHANGELOG.md section only (short entries, see the file).
+          awk -v tag="$tag" '/^## /{on=($2==tag); next} on' CHANGELOG.md | sed '/^[[:space:]]*$/d' > notes.md
+          [ -s notes.md ] || { echo "CHANGELOG.md has no section for $tag"; exit 1; }
+          cat notes.md
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title "Spot-Lyric $tag" --notes-file notes.md
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "Spot-Lyric $tag" --notes-file notes.md
           fi
           gh release upload "$tag" dist/* --clobber
           # Drop assets this build no longer ships.
