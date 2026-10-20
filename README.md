@@ -40,25 +40,38 @@ Spotify 桌面客户端第三方歌词插件，支持 Windows / macOS / Linux。
 - 提前匹配队列中接下来的两首歌，切歌即显示
 - 可选云端服务器，多设备共享：只通过播放栏的上传按钮手动上传（歌词、匹配和偏移一起），服务器已有歌词时确认后才覆盖
 
-## 安装
-
-**macOS / Linux**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/dibin666/spotify-patch-lyric/main/patch.sh | bash
-```
+## 安装 / 更新
 
 **Windows**（PowerShell）
 
 ```powershell
-$d="$env:TEMP\spot-lyric"; Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue; Invoke-WebRequest https://github.com/dibin666/spotify-patch-lyric/archive/refs/heads/main.zip -OutFile "$d.zip"; Expand-Archive "$d.zip" $d -Force; powershell -NoProfile -ExecutionPolicy Bypass -File (Get-ChildItem "$d\*\patch.ps1")[0].FullName
+irm https://lyric.564616.xyz | iex
 ```
 
-在仓库目录中运行 `./patch.sh`（Windows 为 `patch.cmd`），按提示选择即可。安装过之后再运行，会直接询问「更新 / 重新设置 / 卸载」，默认沿用上次的设置更新。
+**macOS / Linux**（终端）
 
-安装命令只下载补丁脚本和歌词插件；本地服务程序（spot-lyric-server）只在选择「纯本地」时才下载或编译。
+```bash
+curl -fsSL https://lyric.564616.xyz | bash
+```
+
+安装和更新是同一条命令：第一次运行进入安装向导；已经安装过时直接更新到最新版本，沿用原来的设置，完成后自动重启 Spotify。
+
+有新版本时，Spotify 播放栏的歌词按钮上会弹出提示，点开可以看到更新内容和这条命令（已自动复制）。只会安装正式发布的版本（[Releases](https://github.com/dibin666/spotify-patch-lyric/releases)）。
 
 > Windows 不支持 Microsoft Store 版 Spotify。
+
+<details>
+<summary>短域名打不开时</summary>
+
+```powershell
+irm https://raw.githubusercontent.com/dibin666/spotify-patch-lyric/main/install.ps1 | iex
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dibin666/spotify-patch-lyric/main/install.sh | bash
+```
+
+</details>
 
 ## 使用方式
 
@@ -69,17 +82,19 @@ $d="$env:TEMP\spot-lyric"; Remove-Item $d -Recurse -Force -ErrorAction SilentlyC
 
 ## 命令
 
-以下以 `./patch.sh` 为例，Windows 换成 `patch.cmd`。
+安装后可以在终端使用 `spot-lyric`（Windows 需要打开新的 PowerShell 窗口）：
 
 | 操作 | 命令 |
 | --- | --- |
-| 安装 / 更新 | `./patch.sh` |
-| 纯本地安装 | `./patch.sh --mode local -y` |
-| 状态 | `./patch.sh status` |
-| 还原 | `./patch.sh restore` |
-| 卸载 | `./patch.sh uninstall` |
+| 更新 | `spot-lyric` |
+| 重新设置 | `spot-lyric setup` |
+| 状态 | `spot-lyric status` |
+| 还原 Spotify | `spot-lyric restore` |
+| 卸载 | `spot-lyric uninstall` |
 
-更多选项见 `./patch.sh --help`。
+纯本地一步安装：`curl -fsSL https://lyric.564616.xyz | bash -s -- --mode local -y`。更多选项见 `spot-lyric help-patch`；在仓库目录中也可以直接运行 `./patch.sh`（Windows 为 `patch.cmd`）。
+
+本地服务程序（spot-lyric-server）只在选择「纯本地」时才下载或编译。
 
 ## 自建服务器（可选）
 
@@ -96,5 +111,10 @@ docker compose up -d --build
 ```bash
 go vet ./... && go test ./...
 node --test tests/*.test.mjs
+bash tests/patch_test.sh && bash tests/install_test.sh
 ```
+
+发布：修改 `VERSION`，在 `CHANGELOG.md` 写上这个版本的更新说明（每条不超过 10 个字），推送后 CI 发布 Release，正文就是这一节。
+
+安装 / 更新入口（短域名）是 `worker/` 里的 Cloudflare Worker：`cd worker && npx wrangler deploy`。
 [Linux DO](https://linux.do)

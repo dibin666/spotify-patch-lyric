@@ -20,6 +20,6 @@ has() { if printf '%s\n' "$FILES" | grep -Eq "$1"; then echo true; else echo fal
 {
   echo "go=$(has '^(go\.(mod|sum)|[^/]+\.go|server/[^/]+\.go|cmd/|VERSION)$|^cmd/')"
   echo "plugin=$(has '^(src/|tests/[^/]+\.mjs$)')"
-  echo "scripts=$(has '^(patch\.(sh|ps1|cmd)|tests/patch_test\.(sh|ps1)|VERSION)$|^src/')"
+  echo "scripts=$(has '^(patch\.(sh|ps1|cmd)|install\.(sh|ps1)|tests/(patch|install)_test\.(sh|ps1)|VERSION)$|^src/')"
   echo "docker=$(has '^(go\.(mod|sum)|[^/]+\.go|VERSION)$|^(server|cmd)/')"
 } | tee -a "$out"

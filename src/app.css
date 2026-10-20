@@ -50,6 +50,57 @@
 .sl-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
 .sl-dialog-actions .sl-btn { min-height: 40px; padding: 8px 24px; }
 .sl-dialog .sl-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* ---------- update: dot on the entry button, bubble above it, notes / command dialog ---------- */
+.sl-entry[data-update="true"]::before {
+  content: ""; position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text-bright-accent, #1ed760); box-shadow: 0 0 0 2px var(--background-base, #121212); pointer-events: none;
+}
+.sl-bubble {
+  --sl-arrow: 50%;
+  position: fixed; z-index: 9998; display: flex; align-items: center; gap: 2px; padding: 4px 4px 4px 0;
+  border-radius: 8px; background: #1ed760; color: #000; box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  font: 700 .8125rem/1 var(--encore-body-font-stack, sans-serif); white-space: nowrap; animation: sl-bubble-in .25s ease-out;
+}
+.sl-bubble::after {
+  content: ""; position: absolute; top: 100%; left: var(--sl-arrow); width: 0; height: 0; transform: translateX(-50%);
+  border: 6px solid transparent; border-top-color: #1ed760;
+}
+.sl-bubble-main {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 4px 6px 12px; border: 0; background: none;
+  color: inherit; font: inherit; cursor: pointer;
+}
+.sl-bubble-dot { width: 6px; height: 6px; border-radius: 50%; background: #000; animation: sl-pulse 1.6s infinite ease-in-out; }
+.sl-bubble-link { text-decoration: underline; text-underline-offset: 2px; }
+.sl-bubble-close {
+  display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0;
+  border: 0; border-radius: 50%; background: none; color: inherit; cursor: pointer; opacity: .7;
+}
+.sl-bubble-close:hover { opacity: 1; background: rgba(0, 0, 0, .12); }
+@keyframes sl-bubble-in { from { opacity: 0; transform: translateY(6px); } }
+.sl-dialog.sl-update { width: min(480px, calc(100vw - 48px)); }
+.sl-update-kicker { margin: 0 0 4px; color: #1ed760; font-size: .75rem; font-weight: 700; letter-spacing: .08em; }
+.sl-update .sl-dialog-title { margin-bottom: 4px; }
+.sl-update-meta { margin: 0 0 16px; color: #b3b3b3; font-size: .8125rem; }
+.sl-update-notes {
+  max-height: min(46vh, 360px); overflow-y: auto; padding: 12px 16px; border-radius: 6px; background: rgba(255, 255, 255, .06);
+  scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .3) transparent;
+}
+.sl-notes h3 { margin: 12px 0 4px; font-size: .875rem; }
+.sl-notes h3:first-child { margin-top: 0; }
+.sl-notes p { margin: 0 0 6px; color: #b3b3b3; }
+.sl-notes ul { margin: 0; padding-left: 1.2em; list-style: disc outside; }
+.sl-notes li { display: list-item; margin: 4px 0; }
+.sl-notes li::marker { color: #1ed760; }
+.sl-notes code, .sl-update-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.sl-notes code { padding: 1px 4px; border-radius: 3px; background: rgba(255, 255, 255, .1); font-size: .8125rem; }
+.sl-update-steps { margin: 4px 0 16px; padding-left: 1.4em; list-style: decimal outside; }
+.sl-update-steps > li { display: list-item; margin: 0 0 12px; padding-left: 4px; }
+.sl-update-steps > li::marker { color: #1ed760; font-weight: 700; }
+.sl-update-command {
+  display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 8px 8px 12px; border-radius: 6px; background: #121212;
+}
+.sl-update-code { flex: 1; min-width: 0; color: #1ed760; font-size: .8125rem; overflow-wrap: anywhere; user-select: all; }
+.sl-about-row { margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, .08); }
 @keyframes sl-fade { from { opacity: 0; } }
 @keyframes sl-pop { from { opacity: 0; transform: scale(.96); } }
 
@@ -86,22 +137,25 @@
 .sl-scroll::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, .5); }
 .sl-scroll[hidden], .sl-state[hidden] { display: none !important; }
 
+/* Left-aligned at a fixed gutter from the page edge (not centred): when the library sidebar is
+ * collapsed or expanded the lyrics follow the edge of the page by the same distance. */
 .sl-wrap {
-  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  --sl-gutter: 64px;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
   width: 100%; margin-top: 64px; container-type: inline-size; position: relative;
 }
 .sl-lines {
-  width: min(100% - 128px, 1024px);
+  width: min(100% - 2 * var(--sl-gutter), 1024px); margin-inline-start: var(--sl-gutter);
   font-family: var(--encore-title-font-stack, sans-serif);
   font-size: calc(var(--encore-text-size-larger-2, 2rem) * var(--sl-scale));
   font-weight: 700; text-wrap: balance;
-  display: flex; flex-direction: column; margin: 0; position: relative;
+  display: flex; flex-direction: column; margin-block: 0; position: relative;
 }
 @container (width > 800px) { .sl-lines { font-size: calc(var(--encore-text-size-larger-3, 3rem) * var(--sl-scale)); } }
 @container (width > 1600px) { .sl-lines { font-size: calc(var(--encore-text-size-larger-4, 4rem) * var(--sl-scale)); } }
 
 .sl-note {
-  width: min(100% - 128px, 1024px); margin: 0 0 0 !important; padding: 20px 0; box-sizing: border-box;
+  width: min(100% - 2 * var(--sl-gutter), 1024px); margin: 0 0 0 var(--sl-gutter) !important; padding: 20px 0; box-sizing: border-box;
   color: var(--lyrics-color-inactive); font: 400 .875rem/normal var(--encore-body-font-stack, sans-serif);
 }
 .sl-note[hidden] { display: none; }
@@ -130,8 +184,8 @@
 }
 
 .sl-provider {
-  width: min(100% - 128px, 1024px); color: var(--lyrics-color-inactive);
-  margin-bottom: 20px; padding: 20px 0 120px; font: 400 .875rem/normal var(--encore-body-font-stack, sans-serif);
+  width: min(100% - 2 * var(--sl-gutter), 1024px); color: var(--lyrics-color-inactive);
+  margin: 0 0 20px var(--sl-gutter); padding: 20px 0 120px; font: 400 .875rem/normal var(--encore-body-font-stack, sans-serif);
 }
 
 /* ---------- sidebar mini lyrics ---------- */
@@ -144,6 +198,9 @@
   contain: strict;
   color: var(--lyrics-color-active);
 }
+/* Spotify's own lyrics preview card in the same sidebar would only repeat the mini view: hidden
+ * while the mini view is there (it comes back when the mini view is closed or the page is open). */
+[data-testid="NPV_Panel_OpenDiv"]:has(.sl-mini) [data-testid="lyrics-npv-section"] { display: none !important; }
 /* Follows playback only (scrolled from script): the wheel keeps scrolling the sidebar itself.
  * At the start the lyrics sit at the top (no top fade); the top fades once they have scrolled. */
 .sl-mini-scroll { position: absolute; inset: 0; overflow: hidden; scrollbar-width: none;
@@ -375,5 +432,5 @@ button.sl-pill-icon:hover { background: rgba(0, 0, 0, .6); }
 .sl-toast.sl-visible { opacity: 1; transform: translate(-50%, 0); }
 
 @media (prefers-reduced-motion: reduce) {
-  .sl-bg, .sl-bg::before, .sl-bg::after, .sl-sync, .sl-toast, .sl-panel, .sl-upload, .sl-dialog, .sl-dialog-backdrop { transition: none; animation: none; }
+  .sl-bg, .sl-bg::before, .sl-bg::after, .sl-sync, .sl-toast, .sl-panel, .sl-upload, .sl-dialog, .sl-dialog-backdrop, .sl-bubble, .sl-bubble-dot { transition: none; animation: none; }
 }

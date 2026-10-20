@@ -25,6 +25,10 @@
   const BAKED_REQUEST = ['direct', 'service', 'server'].includes(PATCH_REQUEST) ? PATCH_REQUEST
     : BAKED_MODE === 'direct' ? 'direct' : BAKED_MODE === 'local' ? 'service' : 'server';
   const LOCAL_URL = /^https?:\/\//.test(LOCAL_SERVICE) ? LOCAL_SERVICE.replace(/\/+$/, '') : 'http://127.0.0.1:38917';
+  /* Install / update endpoint (worker/): the latest release, and the address of the update command. */
+  const SITE_BAKED = '__SPOT_LYRIC_SITE__';
+  const SITE = /^https:\/\//.test(SITE_BAKED) ? SITE_BAKED.replace(/\/+$/, '') : 'https://lyric.564616.xyz';
+  const REPO = 'dibin666/spotify-patch-lyric';
   const log = (...args) => console.log('%c[spot-lyric]', 'color:#1ed760;font-weight:bold', ...args);
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const NAMES = Core.PROVIDER_NAMES;
@@ -349,6 +353,7 @@
       this.view = new LyricsView(this);
       this.entry = new EntryButton(this);
       this.mini = new MiniLyrics(this);
+      this.updater = new Updater(this);
       this.playerAPI.getEvents().addListener('update', (event) => this.onState(event.data));
       this.platform.getHistory().listen(() => { if (this.open && Date.now() > this.ignoreNav) this.close(); });
       document.addEventListener('click', (event) => {
@@ -694,6 +699,8 @@
       this.button.setAttribute('aria-pressed', String(active));
       const lyrics = this.app.engine.lyrics;
       this.button.dataset.has = String(Core.lyricsUsable(lyrics));
+      this.button.dataset.update = String(!!(this.app.updater && this.app.updater.available()));
+      if (this.app.updater) this.app.updater.place();
       /* Pure local mode has no server to upload to. */
       this.uploadButton.hidden = pureLocal();
       const blocked = !!this.uploadBlocked(), saved = !blocked && this.app.engine.remoteState() === 'same';
@@ -1610,7 +1617,20 @@
         h('div', { class: 'sl-setting' }, h('span', { class: 'sl-setting-text' }, h('span', null, '本次会话'),
           h('small', null, `音乐平台 ${stats.requests} 次请求 · 本地服务 ${localStats.requests} 次 · 歌词服务器 ${cloudStats.requests} 次 · ${fmtBytes(stats.sent_bytes + stats.received_bytes + localStats.sent_bytes + localStats.received_bytes + cloudStats.sent_bytes + cloudStats.received_bytes)} · 缓存命中 ${stats.cache_hits} 次`)),
           h('button', { type: 'button', class: 'sl-btn sl-btn-ghost sl-btn-small', onclick: async () => { await store.cacheClear(); toast(local ? '本机缓存已清理，绑定的匹配与本地歌词已保留' : '本机缓存已清理，服务器上的匹配与本地歌词已保留'); } }, '清理缓存')),
-        h('p', { class: 'sl-about' }, `Spot-Lyric for Spotify v${VERSION}`));
+        this.aboutRow());
+    }
+    /* Version, and the update check / the new version's notes. */
+    aboutRow() {
+      const updater = this.app.updater, latest = updater.latest;
+      const status = updater.checking ? '正在检查更新…'
+        : updater.available() ? `发现新版本 v${latest.version}`
+          : latest ? '已是最新版本' : '';
+      return h('div', { class: 'sl-setting sl-about-row' },
+        h('span', { class: 'sl-setting-text' }, h('span', null, `Spot-Lyric for Spotify v${VERSION}`),
+          status ? h('small', { class: updater.available() ? 'sl-good-text' : '' }, status) : null),
+        updater.available()
+          ? h('button', { type: 'button', class: 'sl-btn sl-btn-green sl-btn-small', onclick: () => updater.openDialog() }, '查看更新')
+          : h('button', { type: 'button', class: 'sl-btn sl-btn-ghost sl-btn-small', disabled: updater.checking, onclick: async () => { const p = updater.check(true); this.renderBody(); await p; this.renderBody(); } }, '检查更新'));
     }
   }
 
@@ -1619,6 +1639,181 @@
     document.body.append(el);
     requestAnimationFrame(() => el.classList.add('sl-visible'));
     setTimeout(() => { el.classList.remove('sl-visible'); setTimeout(() => el.remove(), 300); }, 2600);
+  }
+
+  /* ------------------------------------------------------- updates ----- */
+  /* A newer release: a dot on the entry button and, once per version, a bubble above it. The
+   * bubble opens the release notes, then the update command for this system (copied). The
+   * command updates and restarts Spotify; the restarted plugin confirms the new version. */
+  const versionParts = v => String(v || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+  function compareVersions(a, b) {
+    const x = versionParts(a), y = versionParts(b);
+    for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
+    return 0;
+  }
+  const RELEASED = /^\d+\.\d+\.\d+$/.test(VERSION);
+
+  class Updater {
+    constructor(app) {
+      this.app = app; this.latest = null; this.checking = false; this.bubble = null; this.dialog = null;
+      if (!RELEASED) return;
+      /* Restarted after an update. */
+      const last = app.store.get('last_version', '');
+      if (last !== VERSION) {
+        if (last && compareVersions(VERSION, last) > 0) setTimeout(() => toast(`Spot-Lyric 已更新到 v${VERSION}`), 2500);
+        app.store.set('last_version', VERSION);
+      }
+      setTimeout(() => this.check(false), 10000);
+      setInterval(() => this.check(false), 6 * 3600 * 1000);
+      addEventListener('resize', () => this.place());
+    }
+    available() { return RELEASED && !!this.latest && compareVersions(this.latest.version, VERSION) > 0; }
+    os() {
+      const name = String(this.app.platform.operatingSystem || navigator.platform || '');
+      return /win/i.test(name) ? 'windows' : /mac|os x|darwin/i.test(name) ? 'macos' : 'linux';
+    }
+    command() { return this.os() === 'windows' ? `irm ${SITE} | iex` : `curl -fsSL ${SITE} | bash`; }
+    /* The update endpoint first (reachable where GitHub is not), then the GitHub API. */
+    async fetchLatest() {
+      const timeout = () => (AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined);
+      try {
+        const r = await fetch(`${SITE}/latest`, { cache: 'no-store', signal: timeout() });
+        if (r.ok) {
+          const j = await r.json();
+          if (j && /^v\d+\.\d+\.\d+$/.test(j.tag || '')) return { version: j.tag.slice(1), notes: j.notes || '', url: j.url || `https://github.com/${REPO}/releases/tag/${j.tag}`, date: j.published_at || '' };
+        }
+      } catch (_) { /* GitHub below */ }
+      const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { accept: 'application/vnd.github+json' }, signal: timeout() });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      if (!/^v\d+\.\d+\.\d+$/.test(j.tag_name || '')) throw new Error('没有找到版本号');
+      return { version: j.tag_name.slice(1), notes: j.body || '', url: j.html_url, date: j.published_at || '' };
+    }
+    async check(manual) {
+      if (!RELEASED) { if (manual) toast('开发版本不检查更新'); return; }
+      if (this.checking) return;
+      this.checking = true;
+      try { this.latest = await this.fetchLatest(); }
+      catch (e) { if (manual) toast('检查更新失败：' + (e.message || e)); return; }
+      finally { this.checking = false; }
+      this.app.entry.refresh();
+      if (!this.available()) { if (manual) toast(`已是最新版本 v${VERSION}`); return; }
+      if (manual) this.openDialog();
+      else if (this.app.store.get('update_bubble', '') !== this.latest.version) this.showBubble();
+    }
+    /* ---- bubble above the entry button ---- */
+    showBubble() {
+      if (!this.bubble) {
+        this.bubbleText = h('span', { class: 'sl-bubble-text' });
+        this.bubble = h('div', { class: 'sl-bubble', role: 'status', 'data-testid': 'spot-lyric-update-bubble' },
+          h('button', { type: 'button', class: 'sl-bubble-main', onclick: () => { this.dismissBubble(); this.openDialog(); } },
+            h('span', { class: 'sl-bubble-dot', 'aria-hidden': 'true' }), this.bubbleText, h('span', { class: 'sl-bubble-link' }, '查看')),
+          h('button', { type: 'button', class: 'sl-bubble-close', 'aria-label': '关闭', title: '关闭（按钮上的小绿点会保留）', onclick: () => this.dismissBubble() }, svg(ICON.close, 12)));
+      }
+      this.bubbleText.textContent = `发现新版本 v${this.latest.version}`;
+      document.body.append(this.bubble);
+      this.place();
+    }
+    dismissBubble() {
+      if (this.latest) this.app.store.set('update_bubble', this.latest.version);
+      if (this.bubble) this.bubble.remove();
+    }
+    /* Above the entry button, its arrow on the button's centre; hidden while the button is not on screen. */
+    place() {
+      const bubble = this.bubble, button = this.app.entry && this.app.entry.button;
+      if (!bubble || !bubble.isConnected) return;
+      const r = button && button.isConnected ? button.getBoundingClientRect() : null;
+      if (!r || !r.width) { bubble.style.visibility = 'hidden'; return; }
+      bubble.style.visibility = '';
+      const b = bubble.getBoundingClientRect(), center = r.left + r.width / 2;
+      const left = clamp(center - b.width / 2, 8, innerWidth - b.width - 8);
+      bubble.style.left = `${Math.round(left)}px`;
+      bubble.style.top = `${Math.round(r.top - b.height - 12)}px`;
+      bubble.style.setProperty('--sl-arrow', `${Math.round(center - left)}px`);
+    }
+    /* ---- dialog: release notes, then the update command ---- */
+    openDialog() {
+      if (!this.available()) return;
+      this.closeDialog();
+      const previous = document.activeElement;
+      this.box = h('div', { class: 'sl-dialog sl-update', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'sl-update-title', 'data-testid': 'spot-lyric-update' });
+      const backdrop = h('div', { class: 'sl-dialog-backdrop', onmousedown: event => { if (event.target === backdrop) this.closeDialog(); } }, this.box);
+      const onKey = event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); this.closeDialog(); } };
+      document.addEventListener('keydown', onKey, true);
+      this.dialog = { backdrop, onKey, previous };
+      this.notesStep();
+      document.body.append(backdrop);
+    }
+    closeDialog() {
+      const d = this.dialog;
+      if (!d) return;
+      this.dialog = null;
+      document.removeEventListener('keydown', d.onKey, true);
+      d.backdrop.remove();
+      if (d.previous && d.previous.focus) d.previous.focus({ preventScroll: true });
+    }
+    notesStep() {
+      const latest = this.latest, date = latest.date ? new Date(latest.date) : null;
+      const when = date && !isNaN(date) ? ` · ${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} 发布` : '';
+      const update = h('button', { type: 'button', class: 'sl-btn sl-btn-green', 'data-testid': 'spot-lyric-update-go', onclick: () => this.commandStep() }, '更新');
+      this.box.replaceChildren(
+        h('p', { class: 'sl-update-kicker' }, '发现新版本'),
+        h('h2', { class: 'sl-dialog-title', id: 'sl-update-title' }, `Spot-Lyric v${latest.version}`),
+        h('p', { class: 'sl-update-meta' }, `当前 v${VERSION}${when}`),
+        h('div', { class: 'sl-update-notes' }, renderNotes(latest.notes)),
+        h('div', { class: 'sl-dialog-actions' },
+          h('button', { type: 'button', class: 'sl-btn sl-btn-ghost', onclick: () => this.closeDialog() }, '以后再说'), update));
+      update.focus({ preventScroll: true });
+    }
+    commandStep() {
+      const os = this.os(), command = this.command();
+      const open = { windows: '按 Win + R，输入 powershell 后回车', macos: '打开「终端」（启动台 › 其他 › 终端）', linux: '打开终端（Ctrl + Alt + T）' }[os];
+      const copy = async () => {
+        try { await navigator.clipboard.writeText(command); copyBtn.textContent = '已复制'; toast('更新命令已复制'); }
+        catch (_) { const range = document.createRange(); range.selectNodeContents(code); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range); toast('请按 Ctrl + C 复制'); }
+      };
+      const code = h('code', { class: 'sl-update-code', 'data-testid': 'spot-lyric-update-command' }, command);
+      const copyBtn = h('button', { type: 'button', class: 'sl-btn sl-btn-ghost sl-btn-small', onclick: copy }, '复制');
+      const done = h('button', { type: 'button', class: 'sl-btn sl-btn-green', onclick: () => this.closeDialog() }, '好的');
+      this.box.replaceChildren(
+        h('h2', { class: 'sl-dialog-title', id: 'sl-update-title' }, `更新到 v${this.latest.version}`),
+        h('ol', { class: 'sl-update-steps' },
+          h('li', null, open),
+          h('li', null, '粘贴下面的命令并回车', h('div', { class: 'sl-update-command' }, code, copyBtn)),
+          h('li', null, '更新完成后 Spotify 会自动重启')),
+        h('p', { class: 'sl-update-meta' }, '安装过 spot-lyric 命令时，也可以直接运行 spot-lyric'),
+        h('div', { class: 'sl-dialog-actions' },
+          h('button', { type: 'button', class: 'sl-btn sl-btn-ghost', onclick: () => this.notesStep() }, '返回'), done));
+      copy();
+      done.focus({ preventScroll: true });
+    }
+  }
+  /* Release notes (CHANGELOG.md section): headings, "- " lists and paragraphs; **bold** and `code`.
+   * Built as DOM text, never as HTML. */
+  function renderNotes(text) {
+    const box = h('div', { class: 'sl-notes' });
+    let list = null;
+    const inline = s => {
+      const out = [], re = /\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\([^)]*\)/g;
+      let last = 0, m;
+      while ((m = re.exec(s))) {
+        if (m.index > last) out.push(s.slice(last, m.index));
+        out.push(m[1] ? h('strong', null, m[1]) : m[2] ? h('code', null, m[2]) : m[3]);
+        last = re.lastIndex;
+      }
+      if (last < s.length) out.push(s.slice(last));
+      return out;
+    };
+    for (const raw of String(text || '').replace(/\r/g, '').split('\n')) {
+      const line = raw.trim(), item = /^[-*+]\s+(.*)$/.exec(line);
+      if (item) { if (!list) box.append(list = h('ul')); list.append(h('li', null, inline(item[1]))); continue; }
+      list = null;
+      if (!line || /^<!--.*-->$/.test(line)) continue;
+      const head = /^#{1,6}\s+(.*)$/.exec(line);
+      box.append(head ? h('h3', null, inline(head[1])) : h('p', null, inline(line)));
+    }
+    if (!box.childNodes.length) box.append(h('p', null, '这个版本没有更新说明'));
+    return box;
   }
 
   /* ---------------------------------------------------------- boot ----- */
