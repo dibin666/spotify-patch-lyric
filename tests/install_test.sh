@@ -49,11 +49,12 @@ check "config recorded" 'grep -q "^mode=cloud" "$T/data/config"'
 check "plugin v1.5.0 injected" '[[ $(marker) == 1.5.0 ]]'
 check "update site baked into the plugin" 'unzip -p "$T/spotify/Apps/xpui.spa" spot-lyric/spot-lyric.js | grep -c "SITE_BAKED = .http://127.0.0.1:$port." >/dev/null'
 
-echo "== 2. spot-lyric (no arguments) when already up to date: update, no questions"
+echo "== 2. spot-lyric (options only) when already up to date: update, no questions"
 out=$("$HOME/.local/bin/spot-lyric" --no-restart 2>&1 </dev/null); rc=$?; echo "$out" | sed 's/^/     /' | tail -5
 check "exit 0" '[[ $rc == 0 ]]'
 check "says already latest" '[[ $out == *"已是最新版本 v1.5.0"* && $out == *"插件已是最新"* ]]'
 check "no wizard questions" '[[ $out != *"选择使用方式"* ]]'
+check "an update, not an install" '[[ $out == *"已更新到 v1.5.0"* ]]'
 
 echo "== 3. new release v1.5.1: spot-lyric updates and re-patches with the same settings"
 release 1.5.1

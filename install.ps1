@@ -144,8 +144,9 @@ Spot-Lyric for Spotify$(if ($have) { " v$have" })
     try {
         $cmd = if ($Argv.Count) { [string]$Argv[0] } else { '' }
         $rest = @(if ($Argv.Count -gt 1) { $Argv[1..($Argv.Count - 1)] })
-        # Options without a command (--mode local -y): the install wizard.
-        if ($cmd.StartsWith('-') -and $cmd -notin '-h', '--help', '-help') { $rest = @($Argv); $cmd = 'install' }
+        # Options without a command (spot-lyric --no-restart, --mode local -y): like no command, the options
+        # go to patch.ps1 (update asks the wizard when they change the usage mode).
+        if ($cmd.StartsWith('-') -and $cmd -notin '-h', '--help', '-help') { $rest = @($Argv); $cmd = '' }
         switch ($cmd.ToLower()) {
             { $_ -in '', 'update', 'install' } {
                 Update-App

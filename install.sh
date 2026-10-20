@@ -150,8 +150,9 @@ command_hint() {
 NEW_PATH=0
 cmd="${1:-}"
 [[ $# -gt 0 ]] && shift
-# Options without a command (curl ... | bash -s -- --mode local -y): the install wizard.
-if [[ $cmd == -* && $cmd != -h && $cmd != --help ]]; then set -- "$cmd" "$@"; cmd=install; fi
+# Options without a command (spot-lyric --no-restart, ... | bash -s -- --mode local -y): like no
+# command, the options go to patch.sh (update asks the wizard when they change the usage mode).
+if [[ $cmd == -* && $cmd != -h && $cmd != --help ]]; then set -- "$cmd" "$@"; cmd=""; fi
 # Run through a pipe (curl ... | bash): prompts read the terminal, never the rest of this script.
 run_patch() {
   local rc
