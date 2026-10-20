@@ -103,11 +103,11 @@ ensure_latest() {
   local tag have
   have="$(installed_version || true)"
   if ! tag="$(latest_tag)"; then
-    [[ -n $have ]] || die "无法获取最新版本（$SITE、github.com 都连不上），请检查网络后重试"
+    [[ -n $have ]] || die "无法获取最新版本（${SITE}、github.com 都连不上），请检查网络后重试"
     warn "无法检查新版本，继续使用已安装的 v$have"; return 0
   fi
   if [[ $have == "${tag#v}" ]]; then say "已是最新版本 $tag"; return 0; fi
-  if [[ -n $have ]]; then say "发现新版本：v$have → $tag，正在下载…"; else say "下载 Spot-Lyric $tag…"; fi
+  if [[ -n $have ]]; then say "发现新版本：v$have → ${tag}，正在下载…"; else say "下载 Spot-Lyric ${tag}…"; fi
   fetch_release "$tag"
 }
 ensure_app() { [[ -n $(installed_version || true) ]] || ensure_latest; }
@@ -142,7 +142,7 @@ remove_command() {
   return 0
 }
 command_hint() {
-  if [[ ${NEW_PATH:-0} == 1 ]]; then say "以后更新：重新打开终端后运行 spot-lyric（或 $BIN）"
+  if [[ ${NEW_PATH:-0} == 1 ]]; then say "以后更新：重新打开终端后运行 spot-lyric（或 ${BIN}）"
   else say "以后更新：运行 spot-lyric"; fi
 }
 

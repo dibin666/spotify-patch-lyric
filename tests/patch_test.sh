@@ -130,8 +130,10 @@ if [[ -f "$SRC/win/Apps/xpui.spa" ]]; then
 fi
 # bash 3.2 on macOS reads the first byte of a following multibyte character as part of the
 # name ("$VERSION（" -> VERSION\xef): such variables must be written ${NAME}.
-bare="$(LC_ALL=C grep -nE '\$[A-Za-z_][A-Za-z0-9_]*[^[:alnum:][:punct:][:space:]]' "$ROOT/patch.sh" || true)"
-check "patch.sh: no \$NAME directly before non-ASCII text" '[[ -z $bare ]] || { echo "$bare"; false; }'
+for script in patch.sh install.sh tests/install_test.sh; do
+  bare="$(LC_ALL=C grep -nE '\$[A-Za-z_][A-Za-z0-9_]*[^[:alnum:][:punct:][:space:]]' "$ROOT/$script" || true)"
+  check "$script: no \$NAME directly before non-ASCII text" '[[ -z $bare ]] || { echo "$bare"; false; }'
+done
 out="$("$BASH_BIN" "$ROOT/patch.sh" --mode nope 2>&1 || true)"
 check "patch.sh rejects unknown modes" '[[ $out == *未知的使用方式* ]]'
 out="$("$BASH_BIN" "$ROOT/patch.sh" --mode local --request server -y --spotify-path /nonexistent 2>&1 || true)"
