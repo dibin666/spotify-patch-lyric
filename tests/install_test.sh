@@ -32,7 +32,9 @@ cp "$REPO_DIR/install.sh" "$T/site/install.sh"
 port=$((20000 + RANDOM % 20000))
 ( cd "$T/site" && exec python3 -m http.server "$port" --bind 127.0.0.1 >/dev/null 2>&1 ) & srv=$!
 trap 'kill $srv 2>/dev/null; rm -rf "$T"' EXIT
-sleep 1
+# python3 starts slowly on some runners: wait until the site answers.
+wait_site() { local i; for i in $(seq 1 100); do curl -fs -o /dev/null "http://127.0.0.1:$port/latest" && return 0; sleep 0.2; done; echo "update site did not start"; exit 1; }
+wait_site
 export SPOT_LYRIC_SITE="http://127.0.0.1:$port"
 pass=0 fail=0
 check() { if eval "$2"; then echo "  ✔ $1"; pass=$((pass+1)); else echo "  ✘ $1"; fail=$((fail+1)); fi; }
@@ -64,10 +66,10 @@ check "no leftovers" '[[ ! -e $T/data/app.old ]]'
 check "still one PATH line" '[[ $(grep -c "added by spot-lyric" "$HOME/.bashrc") == 1 ]]'
 
 echo "== 4. update site down: keeps working with the installed copy"
-kill $srv; sleep 0.5
+kill $srv; wait $srv 2>/dev/null
 out=$(SPOT_LYRIC_SITE=http://127.0.0.1:1 "$HOME/.local/bin/spot-lyric" status 2>&1 </dev/null); rc=$?
 check "status runs offline" '[[ $rc == 0 && $out == *"插件版本：v1.5.1"* ]]'
-( cd "$T/site" && exec python3 -m http.server "$port" --bind 127.0.0.1 >/dev/null 2>&1 ) & srv=$!; sleep 1
+( cd "$T/site" && exec python3 -m http.server "$port" --bind 127.0.0.1 >/dev/null 2>&1 ) & srv=$!; wait_site
 
 echo "== 5. the old one-liner (curl .../patch.sh | bash) hands over to install.sh"
 cp "$REPO_DIR/patch.sh" "$T/site/patch.sh"
