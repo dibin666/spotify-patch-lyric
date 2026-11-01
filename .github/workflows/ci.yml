@@ -170,11 +170,10 @@ jobs:
           awk -v tag="$tag" '/^## /{on=($2==tag); next} on' CHANGELOG.md | sed '/^[[:space:]]*$/d' > notes.md
           [ -s notes.md ] || { echo "CHANGELOG.md has no section for $tag"; exit 1; }
           cat notes.md
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release edit "$tag" --title "Spot-Lyric $tag" --notes-file notes.md
-          else
-            gh release create "$tag" --target "$GITHUB_SHA" --title "Spot-Lyric $tag" --notes-file notes.md
-          fi
+          # Check-then-create races with a parallel run creating the same release
+          # (and with API read lag): try create first, fall back to edit.
+          gh release create "$tag" --target "$GITHUB_SHA" --title "Spot-Lyric $tag" --notes-file notes.md \
+            || gh release edit "$tag" --title "Spot-Lyric $tag" --notes-file notes.md
           gh release upload "$tag" dist/* --clobber
           # Drop assets this build no longer ships.
           for asset in $(gh release view "$tag" --json assets -q '.assets[].name'); do
