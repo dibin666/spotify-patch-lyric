@@ -14,7 +14,7 @@ export class MemoryStore {
   async cacheClear() { this.cache.clear(); }
   async kvGet(k) { return this.kv.get(k) || null; }
   async kvSet(k, v) { this.kv.set(k, v); }
-  async matchGet(t) { const m = this.matches.get(core.trackKey(t)); return m ? { candidate: core.candidateFromJson(m.c), manual: m.manual } : { candidate: null, manual: false }; }
-  async matchSave(t, c, manual) { this.matches.set(core.trackKey(t), { c: core.candidateJson(c), manual }); }
+  async matchGet(t) { const m = this.matches.get(core.trackKey(t)); return m ? { candidate: core.candidateFromJson(m.c), manual: m.manual, instrumental: !!m.inst } : { candidate: null, manual: false, instrumental: false }; }
+  async matchSave(t, c, manual, inst) { this.matches.set(core.trackKey(t), { c: core.candidateJson(c), manual, inst: !!inst }); }
   async matchRemove(t) { this.matches.delete(core.trackKey(t)); }
 }

@@ -273,6 +273,49 @@ test('engine: manual search, bind and unbind (offline)', async () => {
   assert.equal((await engine.search('Other Z')).providers[0].candidates[0].bound, true);
 });
 
+test('engine: instrumental mark and no-lyrics bindings (offline)', async () => {
+  /* "标记为纯音乐" binds no provider song: the flag in the matches store is the
+   * answer, so it survives a cache clear and short-circuits every rematch. */
+  const { engine, store } = fakeEngine(() => ({ status: 404, body: '' }));
+  const track = { uri: 'spotify:track:eeeeeeeeeeeeeeeeeeeeee', title: 'Wordless', artists: ['A'], album: '', duration_ms: 60000 };
+  await engine.setTrack(track);
+  assert.equal(engine.status, '未匹配，可手动选择歌词');
+  assert.equal(await engine.markInstrumental(), true);
+  assert.equal(engine.status, '纯音乐，没有歌词');
+  assert.equal(engine.match, null);
+  await store.cacheClear();
+  const again = new core.Engine({ store, http: new core.Http(async () => { throw new Error('no network expected'); }), settings: () => ({}) });
+  await again.setTrack(track);
+  assert.equal(again.status, '纯音乐，没有歌词');
+  assert.equal(again.lyrics.note, 'instrumental');
+  /* Unbinding removes the mark: the track is matched again from scratch. */
+  const rematch = new core.Engine({ store, http: new core.Http(async () => ({ status: 404, body: '' })), settings: () => ({}) });
+  rematch.track = track;
+  await rematch.unbind();
+  assert.equal(rematch.status, '未匹配，可手动选择歌词');
+
+  /* A song whose source keeps no lyric body (credits only) still binds as the
+   * track's answer; the bound song is kept for comments resolution. */
+  const cred = fakeEngine((req) => {
+    if (req.url.includes('/search/')) return { status: 200, body: JSON.stringify({ code: 200, result: { songs: [{ id: 6, name: 'Op.1', duration: 60000, artists: [{ name: 'A' }], album: { name: '' } }] } }) };
+    if (req.url.includes('u.y.qq.com')) return { status: 200, body: JSON.stringify({ code: 0, req_1: { code: 0, data: { body: { song: { list: [] } } } } }) };
+    if (req.url.includes('/song/lyric')) return { status: 200, body: JSON.stringify({ code: 200, lrc: { lyric: '{"t":0,"c":[{"tx":"作词: A"}]}' } }) };
+    return { status: 404, body: '' };
+  });
+  await cred.engine.setTrack({ uri: 'spotify:track:ffffffffffffffffffffff', title: 'Op.1', artists: ['A'], album: '', duration_ms: 60000 });
+  const found = await cred.engine.search('Op.1 A');
+  const candidate = found.providers[0].candidates[0];
+  const preview = await cred.engine.preview(candidate);
+  assert.equal(preview.note, 'credits');
+  assert.equal(await cred.engine.bind(candidate, preview), true);
+  assert.equal(cred.engine.status, '没有歌词 · 已绑定 网易云音乐');
+  assert.equal(cred.engine.match.id, '6');
+  const restored = new core.Engine({ store: cred.store, http: new core.Http(async () => { throw new Error('no network expected'); }), settings: () => ({}) });
+  await restored.setTrack({ uri: 'spotify:track:ffffffffffffffffffffff', title: 'Op.1', artists: ['A'], album: '', duration_ms: 60000 });
+  assert.equal(restored.status, '没有歌词 · 已绑定 网易云音乐');
+  assert.equal(restored.match.id, '6');
+});
+
 test('engine: cross-script artists are confirmed by lyric text; instrumental is a final answer (offline)', async () => {
   const lrc = list => list.map((t, i) => `[00:${String(10 + i * 3).padStart(2, '0')}.00]${t}`).join('\n');
   const LINES = ['如果那两个字没有颤抖', '我不会发现我难受', '怎么说出口', '也不过是分手', '如果对于明天没有要求'];

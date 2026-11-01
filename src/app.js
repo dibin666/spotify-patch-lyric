@@ -192,9 +192,9 @@
     async matchGet(track) {
       const entry = await this._get('matches', Core.trackKey(track));
       const candidate = entry ? Core.candidateFromJson(entry.c) : null;
-      return { candidate, manual: !!(entry && entry.manual) };
+      return { candidate, manual: !!(entry && entry.manual), instrumental: !!(entry && entry.inst) };
     }
-    matchSave(track, candidate, manual) { return this._put('matches', { k: Core.trackKey(track), c: Core.candidateJson(candidate), manual: !!manual }); }
+    matchSave(track, candidate, manual, instrumental) { return this._put('matches', { k: Core.trackKey(track), c: Core.candidateJson(candidate), manual: !!manual, inst: !!instrumental }); }
     matchRemove(track) { return this._delete('matches', Core.trackKey(track)); }
   }
 
@@ -1103,11 +1103,13 @@
         h('div', { class: 'sl-controls-right' }, this.offsetPill, this.sourcePill, this.settingsBtn));
       this.wrap = h('div', { class: 'sl-wrap' }, this.note, this.linesBox, this.footer);
       this.stateBox = h('div', { class: 'sl-state' });
-      this.scroller = h('div', { class: 'sl-scroll' }, this.wrap, this.controls);
+      this.scroller = h('div', { class: 'sl-scroll' }, this.wrap);
       this.syncBtn = h('button', { type: 'button', class: 'sl-sync', onclick: () => this.follow(true) }, svg(ICON.sync), h('span', null, '同步'));
       this.bg = h('div', { class: 'sl-bg' });
+      /* Controls are page chrome, not scroll content: they stay reachable on the
+       * no-lyrics / 纯音乐 state where the scroller is hidden. */
       this.page = h('div', { class: 'sl-page', 'data-testid': 'spot-lyric-page', tabindex: '-1' },
-        this.bg, this.scroller, this.stateBox, this.syncBtn);
+        this.bg, this.scroller, this.stateBox, this.controls, this.syncBtn);
 
       const userScroll = () => {
         this.userScrolling = true;
@@ -1455,6 +1457,7 @@
       const actions = h('div', { class: 'sl-actions' },
         h('button', { type: 'button', class: 'sl-btn sl-btn-ghost', onclick: () => app.currentTrack && app.engine.setTrack(app.currentTrack, true) }, '重新自动匹配'),
         h('button', { type: 'button', class: 'sl-btn sl-btn-ghost', onclick: () => this.unbind() }, '解除绑定'),
+        h('button', { type: 'button', class: 'sl-btn sl-btn-ghost', onclick: () => this.markInstrumental() }, '标记为纯音乐'),
         h('button', { type: 'button', class: 'sl-btn sl-btn-ghost', onclick: () => this.importFile() }, '导入 LRC'),
         h('button', { type: 'button', class: 'sl-btn sl-btn-ghost', onclick: () => this.exportLrc() }, '复制 LRC'));
       const box = h('div', { class: 'sl-match' }, now, form, this.chipsEl, this.listEl, actions);
@@ -1481,6 +1484,14 @@
       }
       try { await engine.unbind({ remote }); toast(remote ? '已解除绑定并删除服务器上的歌词' : '已解除本机绑定并重新匹配'); }
       catch (e) { toast('解除绑定失败：' + (e.message || e)); }
+    }
+    /* "标记为纯音乐": the track has no lyrics to find; kept like a manual binding
+     * until 解除绑定 / 重新自动匹配. */
+    async markInstrumental() {
+      const engine = this.app.engine;
+      if (!engine.track) return;
+      try { const ok = await engine.markInstrumental(); toast(ok ? '已标记为纯音乐' : '保存失败'); }
+      catch (e) { toast('保存失败：' + (e.message || e)); }
     }
     renderStatus() {
       if (!this.statusEl) return;
@@ -1546,19 +1557,21 @@
       if (!this.preview) box.append(h('div', { class: 'sl-loader sl-loader-small' }, h('i'), h('i'), h('i')));
       else if (this.preview.error) box.append(h('p', { class: 'sl-error' }, this.preview.error));
       else if (!Core.lyricsUsable(this.preview.lyrics)) {
+        const note = this.preview.lyrics && this.preview.lyrics.note;
         box.append(h('p', { class: 'sl-empty-text' }, ({
           missing: 'QQ 音乐未收录这首歌的歌词', uncollected: '网易云音乐暂未收录这首歌的歌词',
           credits: '只有作词 / 作曲信息，没有歌词正文', instrumental: '纯音乐，没有歌词',
-        })[this.preview.lyrics && this.preview.lyrics.note] || '这个结果没有歌词'));
-        /* An instrumental still binds as a song: the binding marks the track and
-         * lets the comments plugin resolve this NetEase song's comment area. */
-        if (this.preview.lyrics && this.preview.lyrics.note === 'instrumental') {
+        })[note] || '这个结果没有歌词'));
+        /* A song without a lyric body still binds as the track's answer: an instrumental
+         * marks it 纯音乐, and any bound song lets the comments plugin resolve that
+         * provider song's comment area. */
+        if (note) {
           box.append(h('div', { class: 'sl-preview-actions' },
             h('button', { type: 'button', class: 'sl-btn sl-btn-green', onclick: async (event) => {
               const button = event.currentTarget; button.disabled = true;
               try {
                 const ok = await this.app.engine.bind(c, this.preview.lyrics);
-                toast(ok ? '已绑定纯音乐歌曲' : '保存失败');
+                toast(ok ? (note === 'instrumental' ? '已绑定纯音乐歌曲' : '已绑定歌曲') : '保存失败');
                 this.search();
               } catch (e) { toast('保存失败：' + (e.message || e)); button.disabled = false; }
             } }, '绑定此歌曲'),

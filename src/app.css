@@ -225,9 +225,10 @@
 .sl-mini:hover .sl-mini-close, .sl-mini-close:focus-visible { opacity: 1; }
 
 /* ---------- bottom controls (like the official translate pill) ---------- */
+/* Page-level chrome (not inside the scroller): visible on no-lyrics states too. */
 .sl-controls {
-  position: sticky; bottom: 32px; z-index: 1; display: flex; width: 100%; box-sizing: border-box;
-  margin-top: -40px; padding: 0 32px; opacity: 0; transition: opacity .2s; pointer-events: none;
+  position: absolute; left: 0; right: 0; bottom: 32px; z-index: 1; display: flex; box-sizing: border-box;
+  padding: 0 32px; opacity: 0; transition: opacity .2s; pointer-events: none;
 }
 .sl-page:hover .sl-controls, .sl-controls:focus-within { opacity: 1; }
 .sl-controls-left { display: flex; margin-inline-end: auto; gap: 8px; }

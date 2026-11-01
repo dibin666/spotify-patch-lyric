@@ -18,7 +18,7 @@ const src = fs.readFileSync(path.join(root, 'src/comments.js'), 'utf8');
 const HOOK = `
 ;globalThis.__internals = {
   md5, qrMatrix, weapiBody, rsaSecretKey, normComment, songState, fetchPage, resolveSong,
-  jar: () => jar, jarHeader, captureBodyCookie, api, accountStatus,
+  jar: () => jar, jarHeader, captureBodyCookie, captureSession, api, accountStatus,
   account: () => account,
   UI: CommentsUI,
   setHost(x) { app = x.app; Core = x.Core; h = x.h; svg = x.svg; toast = x.toast; confirmDialog = x.confirmDialog; },
@@ -154,6 +154,23 @@ test('resolveSong returns the bound NetEase song and falls back to search', asyn
   const found = await i.resolveSong();
   assert.ok(found && /^\d+$/.test(found.id), `expected numeric NetEase id, got ${found && found.id}`);
   assert.equal(found.via, 'search');
+});
+
+test('captureSession restores MUSIC_U from the body token when headers were lost', () => {
+  const i = sandbox();
+  i.setHost(stubApp(null, null));
+  /* Cellphone logins answer {code:200, token, profile} without a cookie field;
+   * token is the MUSIC_U value, so an old relay that drops Set-Cookie still
+   * ends up with a usable session. */
+  i.captureSession({ code: 200, token: '0abc123token', profile: { userId: 7 } });
+  assert.equal(i.jar().get('MUSIC_U'), '0abc123token');
+  assert.match(i.jarHeader(), /MUSIC_U=0abc123token/);
+  /* A cookie string in the body wins over the token (the real Set-Cookie value). */
+  const j = sandbox();
+  j.setHost(stubApp(null, null));
+  j.captureSession({ code: 200, token: 'ignored', cookie: 'MUSIC_U=realcookie; Path=/; __csrf=csrf9' });
+  assert.equal(j.jar().get('MUSIC_U'), 'realcookie');
+  assert.equal(j.jar().get('__csrf'), 'csrf9');
 });
 
 test('QR login unikey endpoint answers on the plain api path', async () => {

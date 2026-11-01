@@ -306,11 +306,31 @@
       if (m) jarSet(m[1], m[2]);
     }
   }
-  /* The login endpoints hand the cookie string back in the JSON body too. */
+  /* The login endpoints hand the cookie string back in the JSON body too
+   * (a plain string or a list of Set-Cookie lines, depending on endpoint). */
   function captureBodyCookie(bodyCookie) {
-    for (const part of String(bodyCookie || '').split(';')) {
-      const m = /^\s*(MUSIC_U|__csrf|NMTID)=([^;]*)/.exec(part);
-      if (m) jarSet(m[1], m[2]);
+    for (const item of Array.isArray(bodyCookie) ? bodyCookie : [bodyCookie]) {
+      for (const part of String(item || '').split(';')) {
+        const m = /^\s*(MUSIC_U|__csrf|NMTID)=([^;]*)/.exec(part);
+        if (m) jarSet(m[1], m[2]);
+      }
+    }
+  }
+  /* Sign-in responses carry the session in more than one shape: the QR check
+   * returns a `cookie` string, cellphone/e-mail logins return `token` — which
+   * IS the MUSIC_U value (the same string Set-Cookie would have carried, so
+   * transports that cannot surface response headers still leave a session).
+   * Other projects confirm: login_by_token(csrf, token) sends it as MUSIC_U. */
+  function captureSession(data) {
+    if (!data || typeof data !== 'object') return;
+    captureBodyCookie(data.cookie);
+    if (!jar.get('MUSIC_U')) {
+      const token = data.token || (data.data && data.data.token) || (data.result && data.result.token);
+      if (typeof token === 'string' && token) jarSet('MUSIC_U', token);
+    }
+    if (!jar.get('__csrf')) {
+      const csrf = data.__csrf || data.csrf || data.csrfToken || (data.data && data.data.__csrf) || (data.data && data.data.csrf);
+      if (typeof csrf === 'string' && csrf) jarSet('__csrf', csrf);
     }
   }
 
@@ -385,15 +405,27 @@
       app.store.kvSet(EAPI_DEVICE_KEY, eapiDeviceId);
     }
   }
-  const eapiConfig = () => ({ os: 'iPhone OS', appver: '10.0.0', osver: '16.2', channel: 'distribution', deviceId: eapiDeviceId });
-  const eapiCookie = () => { const c = eapiConfig(); return `os=${encodeURIComponent(c.os)}; appver=${c.appver}; osver=${c.osver}; channel=${c.channel}; deviceId=${c.deviceId}`; };
+  /* Device profile mirrors what the maintained NetEase API projects send for
+   * the iPhone client (appver/UA pair, versioncode, build number, resolution);
+   * a coherent fingerprint keeps the risk wall quieter than a bare one. */
+  const EAPI_UA = 'NeteaseMusic 9.0.90/5038 (iPhone; iOS 16.2; zh_CN)';
+  const eapiConfig = () => ({
+    os: 'iPhone OS', appver: '9.0.90', osver: '16.2', channel: 'distribution', deviceId: eapiDeviceId,
+    versioncode: '5038', mobilename: '', buildver: String(Math.floor(Date.now() / 1000)), resolution: '1920x1080',
+  });
+  /* Same device blob the request `header` carries, as the Cookie header — the
+   * maintained API projects send all of it (MUSIC_U is merged in by api()). */
+  const eapiCookie = () => {
+    const c = eapiConfig();
+    return `os=${encodeURIComponent(c.os)}; appver=${c.appver}; osver=${c.osver}; versioncode=${c.versioncode}; channel=${c.channel}; deviceId=${c.deviceId}; buildver=${c.buildver}; resolution=${c.resolution}`;
+  };
   const pkcs7 = (bytes, bs = 16) => {
     const pad = bs - (bytes.length % bs), out = new Uint8Array(bytes.length + pad);
     out.set(bytes); out.fill(pad, bytes.length); return out;
   };
   const hexU = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
   async function eapiBody(ep, params) {
-    const payload = JSON.stringify({ ...params, header: JSON.stringify({ ...eapiConfig(), requestId: String(20000000 + Math.floor(Math.random() * 1e7)) }) });
+    const payload = JSON.stringify({ ...params, header: JSON.stringify({ ...eapiConfig(), requestId: `${Date.now()}_${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}` }) });
     const apiPath = ep.replace('/eapi/', '/api/');
     const digest = md5(`nobody${apiPath}use${payload}md5forencrypt`);
     const text = `${apiPath}-36cd479b6b5-${payload}-36cd479b6b5-${digest}`;
@@ -408,8 +440,10 @@
   }
   async function eapi(path, params, signal) {
     const body = await eapiBody(path, params);
-    /* The desktop client also sends its device config as cookies. */
-    const headers = { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: eapiCookie() };
+    /* The desktop client also sends its device config as cookies, and the
+     * client UA — the relay forwards it (the direct path drops it, where the
+     * browser's own UA goes instead, which NetEase accepts either way). */
+    const headers = { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: eapiCookie(), 'User-Agent': EAPI_UA };
     return api('POST', EAPI_HOST + path, { body, headers, signal });
   }
 
@@ -823,7 +857,7 @@
       else { this.qr.stopped = true; this.loginBody.replaceChildren(tab === 'phone' ? this.phoneForm() : this.emailForm()); }
     }
     loginError(text) { setText(this.loginErr, text || ''); }
-    async finishLogin() {
+    async finishLogin(loginProfile) {
       let profile = null;
       try { profile = await accountStatus(); } catch (_) { /* below */ }
       if (!profile) {
@@ -831,6 +865,10 @@
           this.loginError('登录成功但无法读取会话 Cookie：当前转发服务版本过旧（请更新本地服务 / 歌词服务器），可改用扫码登录');
           return;
         }
+        /* MUSIC_U came from the body token but the status probe failed: keep
+         * the profile the login response already carried instead of a stub. */
+        const p = loginProfile || {};
+        profile = { userId: p.userId || 0, nickname: p.nickname || '', avatar: p.avatarUrl || p.avatar || '' };
       }
       /* Signing in as a different user: cached comments carry the previous
        * account's liked flags — drop them all and refetch. */
@@ -878,9 +916,9 @@
           if (session.stopped) return;
           const code = data && data.code;
           if (code === 803) {
-            captureBodyCookie(data.cookie);
+            captureSession(data);
             setText(text, '登录成功，正在获取账号信息…');
-            this.finishLogin();
+            this.finishLogin(data && data.profile);
             return;
           }
           if (code === 802) setText(text, '已扫码，请在手机上确认登录');
@@ -934,11 +972,10 @@
       try {
         /* Desktop-client channel (eapi): the phone login the official app uses.
          * checkToken is where a slider token would go on the strictest accounts. */
-        const params = { type: '1', phone, remember: 'true', countrycode: '86', checkToken: '' };
+        const params = { type: '1', phone, remember: 'true', rememberLogin: 'true', https: 'true', countrycode: '86', checkToken: '' };
         if (this._phoneMode === 'captcha') params.captcha = secret; else params.password = md5(secret);
         const { data } = await eapi('/eapi/w/login/cellphone', params);
-        if (data && data.code === 200 && data.cookie) captureBodyCookie(data.cookie);
-        if (data && data.code === 200) { this.finishLogin(); return; }
+        if (data && data.code === 200) { captureSession(data); this.finishLogin(data.profile); return; }
         const msg = (data && (data.message || data.msg)) || `code ${data && data.code}`;
         /* Account-level protection still wins: point at the QR path, which the
          * logged-in app authorizes by design. */
@@ -962,9 +999,8 @@
       if (!pass) { this.loginError('请输入密码'); return; }
       btn.disabled = true; this.loginError('');
       try {
-        const { data } = await eapi('/eapi/login', { type: '1', username: email.trim(), remember: 'true', password: md5(pass) });
-        if (data && data.code === 200 && data.cookie) captureBodyCookie(data.cookie);
-        if (data && data.code === 200) { this.finishLogin(); return; }
+        const { data } = await eapi('/eapi/login', { type: '1', username: email.trim(), remember: 'true', rememberLogin: 'true', https: 'true', password: md5(pass) });
+        if (data && data.code === 200) { captureSession(data); this.finishLogin(data.profile); return; }
         this.loginError('登录失败：' + (data && (data.message || data.msg) || `code ${data && data.code}`));
       } catch (e) { this.loginError('登录失败：' + (e.message || e)); }
       finally { btn.disabled = false; }

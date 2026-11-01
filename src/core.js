@@ -319,6 +319,7 @@
     };
   }
   function candidateJson(c) {
+    if (!c) return null;
     const json = { id: c.id, mid: c.mid || '', provider: c.provider, title: c.title || '', album: c.album || '', duration_ms: c.duration_ms || 0, artists: (c.artists || []).slice() };
     if (c.aliases && c.aliases.length) json.aliases = c.aliases.slice(0, 8);
     if (c.verified) json.verified = true;
@@ -1010,7 +1011,7 @@
           return;
         }
       }
-      let { candidate: saved, manual } = await this.store.matchGet(track); check();
+      let { candidate: saved, manual, instrumental } = await this.store.matchGet(track); check();
       /* Lyrics uploaded to the lyrics server (by anyone) come before automatic matching; a
        * binding chosen on this machine comes first ("重新自动匹配" skips both). */
       let remoteKnown = false;
@@ -1026,6 +1027,12 @@
       }
       if (visible && !remoteKnown) this._learnRemote(track, signal, current);
       if (saved && !manual) { const verified = saved.verified; matchScore(track, saved); if (!saved.eligible && !verified) saved = null; }
+      /* A manual "纯音乐" mark binds no provider song: the flag in the matches store is
+       * the whole answer — it survives cache clears and short-circuits every rematch. */
+      if (manual && instrumental && !force) {
+        ui.install(finalizeLyrics(emptyLyrics('local'), 'instrumental'), null, null, 'manual');
+        ui.status('纯音乐，没有歌词'); return;
+      }
       const lyricsKey = TRACK_CACHE + key, negativeKey = NEGATIVE + key;
       if (!force) {
         const cached = await this.store.cacheGet(lyricsKey); check();
@@ -1036,12 +1043,14 @@
             this.http.cacheHit();
             ui.status(manual ? '已绑定歌词 · 缓存' : '歌词缓存'); return;
           }
-          /* A deliberately bound instrumental song restores as-is: "纯音乐" plus
-           * the song itself, which the comments view needs to resolve comments. */
-          if (manual && entry.lyrics && entry.lyrics.note === 'instrumental' && entry.match) {
+          /* A deliberately bound song without a lyric body restores as-is: an instrumental
+           * marks the track as 纯音乐; the bound song itself lets the comments view resolve
+           * that provider song's comment area. */
+          if (manual && entry.lyrics && entry.lyrics.note && entry.match) {
             ui.install(entry.lyrics, entry.colors, candidateFromJson(entry.match), 'manual');
             this.http.cacheHit();
-            ui.status('纯音乐，没有歌词'); return;
+            ui.status(entry.lyrics.note === 'instrumental' ? '纯音乐，没有歌词' : `没有歌词 · 已绑定 ${PROVIDER_NAMES[entry.match.provider] || entry.match.provider}`);
+            return;
           }
         }
         const negative = await this.store.cacheGet(negativeKey); check();
@@ -1153,6 +1162,14 @@
         await this._complete(job, lyrics, `纯音乐，没有歌词 · 已绑定 ${PROVIDER_NAMES[candidate.provider]}`, null, candidate, 'manual');
         return true;
       }
+      /* A manual choice binds the song itself even when the source keeps no lyric body for
+       * it (credits only / uncollected): the binding marks the track and lets comments
+       * resolve this provider song's comment area. */
+      if (manual && lyrics && lyrics.note) {
+        await this.store.matchSave(job.track, candidate, manual);
+        await this._complete(job, lyrics, `没有歌词 · 已绑定 ${PROVIDER_NAMES[candidate.provider]}`, null, candidate, 'manual');
+        return true;
+      }
       if (!lyricsUsable(lyrics)) return false;
       await this.store.matchSave(job.track, candidate, manual);
       await this._complete(job, lyrics, `${manual ? '已绑定' : '已匹配'}歌词 · ${PROVIDER_NAMES[candidate.provider]}`, null, candidate, manual ? 'manual' : 'auto');
@@ -1165,9 +1182,9 @@
         const entry = { lyrics, colors: colors || null, match: match ? candidateJson(match) : null, origin: origin || null };
         await this.store.cachePut(TRACK_CACHE + job.key, JSON.stringify(entry), 0);
         await this.store.cacheRemove(NEGATIVE + job.key);
-      } else if (lyrics && lyrics.note === 'instrumental' && match) {
-        /* Bound instrumentals cache like a hit: the next play restores song + status
-         * without a refetch (the restore branch above reads this shape). */
+      } else if (lyrics && lyrics.note && match) {
+        /* Bound songs without a lyric body cache like a hit: the next play restores song
+         * + status without a refetch (the restore branch above reads this shape). */
         const entry = { lyrics, colors: null, match: candidateJson(match), origin: origin || null };
         await this.store.cachePut(TRACK_CACHE + job.key, JSON.stringify(entry), 0);
         await this.store.cacheRemove(NEGATIVE + job.key);
@@ -1285,10 +1302,12 @@
       return { candidates: all, providers: groups };
     }
     preview(candidate) { return this.providerFetch(candidate, null, { remaining: 2 }); }
-    /* "使用此歌词": bound on this machine only (the upload button shares it). */
+    /* "使用此歌词" / "绑定此歌曲": bound on this machine only (the upload button shares it).
+     * A song without a lyric body (note set) binds too: it marks the track — an
+     * instrumental answers "纯音乐" — and lets comments resolve the provider song. */
     async bind(candidate, lyrics) {
-      const instrumental = !!(lyrics && lyrics.note === 'instrumental');
-      if ((!lyricsUsable(lyrics) && !instrumental) || !this.track) return false;
+      const note = lyrics && lyrics.note;
+      if ((!lyricsUsable(lyrics) && !note) || !this.track) return false;
       this._interrupt();
       const track = this.track, key = trackKey(track);
       this.prefetched.delete(key);
@@ -1297,7 +1316,23 @@
       await this.store.cacheRemove(NEGATIVE + key);
       await this.store.cachePut(TRACK_CACHE + key, JSON.stringify({ lyrics, colors: null, match: candidateJson(candidate), origin: 'manual' }), 0);
       this._install(lyrics, null, candidate, 'manual');
-      this._setStatus(instrumental ? `纯音乐，没有歌词 · 已绑定 ${PROVIDER_NAMES[candidate.provider]}` : `已绑定歌词 · ${PROVIDER_NAMES[candidate.provider]}`);
+      this._setStatus(note === 'instrumental' ? `纯音乐，没有歌词 · 已绑定 ${PROVIDER_NAMES[candidate.provider]}`
+        : note ? `没有歌词 · 已绑定 ${PROVIDER_NAMES[candidate.provider]}` : `已绑定歌词 · ${PROVIDER_NAMES[candidate.provider]}`);
+      return true;
+    }
+    /* "标记为纯音乐": the answer needs no provider song at all. The mark lives in the
+     * matches store (like a manual binding it survives cache clears) until unbound. */
+    async markInstrumental() {
+      if (!this.track) return false;
+      this._interrupt();
+      const track = this.track, key = trackKey(track);
+      this.prefetched.delete(key);
+      await this.store.matchSave(track, null, true, true);
+      await this.store.kvSet('local-lyrics:' + key, '');
+      await this.store.cacheRemove(TRACK_CACHE + key);
+      await this.store.cacheRemove(NEGATIVE + key);
+      this._install(finalizeLyrics(emptyLyrics('local'), 'instrumental'), null, null, 'manual');
+      this._setStatus('纯音乐，没有歌词');
       return true;
     }
     /* Drops the binding and local lyrics on this machine, then matches again (the server copy,
