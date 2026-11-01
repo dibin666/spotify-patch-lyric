@@ -64,6 +64,7 @@
     minus: '<path d="M2 7.25h12v1.5H2z"/>',
     plus: '<path d="M7.25 2v5.25H2v1.5h5.25V14h1.5V8.75H14v-1.5H8.75V2z"/>',
     note: '<path d="M10 1.5v8.27A2.5 2.5 0 1 0 11.5 12V4.6l3-.86V1.95l-4.5 1.3z"/>',
+    comment: '<path d="M2 2.25h12v8.75H7.6L4.2 13.9v-2.9H2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>',
     /* Cloud + arrow: upload to the lyrics server; cloud + check: the server has these lyrics. */
     upload: `<path ${STROKE} d="M5.25 12.5h-1a3 3 0 0 1-.43-5.97 4.25 4.25 0 0 1 8.3-.78A3.38 3.38 0 0 1 11.75 12.5h-1"/><path ${STROKE} d="M8 14.25V8.5m-2.25 2.25L8 8.5l2.25 2.25"/>`,
     uploaded: `<path ${STROKE} d="M4.25 12.5a3 3 0 0 1-.43-5.97 4.25 4.25 0 0 1 8.3-.78A3.38 3.38 0 0 1 11.75 12.5z"/><path ${STROKE} d="m5.9 9.4 1.45 1.45 2.85-2.85"/>`,
@@ -372,8 +373,12 @@
       if (!this.store.setting('comments_plugin')) return;
       if (document.querySelector('script[src*="spot-lyric-comments.js"]')) return;
       const script = h('script', { src: '/spot-lyric/spot-lyric-comments.js', defer: 'defer' });
-      script.onload = () => {
-        try { window.SpotLyricComments && window.SpotLyricComments.mount(this.pluginHost()); }
+      script.onload = async () => {
+        try {
+          window.SpotLyricComments && await window.SpotLyricComments.mount(this.pluginHost());
+          this.plugin = window.SpotLyricComments;
+          if (this.view) this.view.addCommentsEntry();
+        }
         catch (e) { console.error('[spot-lyric] comments plugin failed', e); this.commentsError = String(e && e.message || e); }
       };
       script.onerror = () => { this.commentsMissing = true; log('comments plugin file missing'); };
@@ -1362,8 +1367,16 @@
     }
     closePanel() {
       if (!this.panel) return;
+      if (this.panel.tab === 'comments' && this.app.plugin && this.app.plugin.view) this.app.plugin.view.deactivate();
       this.panel.el.remove(); this.panel = null;
       this.page.focus({ preventScroll: true });
+    }
+    /* Comments entry: a round button in the bottom-right controls (left of the
+     * gear). Exists only while the comments plugin is mounted. */
+    addCommentsEntry() {
+      if (this.commentsEntry || !(this.app.plugin && this.app.plugin.view)) return;
+      this.commentsEntry = h('button', { type: 'button', class: 'sl-round', title: '网易云音乐评论区', onclick: () => this.openPanel('comments') }, svg(ICON.comment));
+      this.settingsBtn.before(this.commentsEntry);
     }
   }
 
@@ -1372,15 +1385,29 @@
     constructor(app, view) {
       this.app = app; this.view = view; this.tab = 'match'; this.result = null; this.providerTab = app.store.setting('preferred_provider');
       this.selected = null; this.preview = null; this.searching = false; this.query = '';
-      this.tabs = { match: h('button', { type: 'button', class: 'sl-tab', onclick: () => this.show('match') }, '匹配歌词'), settings: h('button', { type: 'button', class: 'sl-tab', onclick: () => this.show('settings') }, '设置') };
+      /* Tab order: 匹配歌词 | 评论 (plugin only) | 插件 | 设置. */
+      const mkTab = (key, label) => h('button', { type: 'button', class: 'sl-tab', onclick: () => this.show(key) }, label);
+      this.tabs = { match: mkTab('match', '匹配歌词') };
+      if (this.app.plugin && this.app.plugin.view) this.tabs.comments = mkTab('comments', '评论');
+      this.tabs.plugins = mkTab('plugins', '插件');
+      this.tabs.settings = mkTab('settings', '设置');
       this.body = h('div', { class: 'sl-panel-body' });
       this.el = h('aside', { class: 'sl-panel', 'aria-label': '歌词面板' },
-        h('header', { class: 'sl-panel-head' }, h('div', { class: 'sl-tabs' }, this.tabs.match, this.tabs.settings),
+        h('header', { class: 'sl-panel-head' }, h('div', { class: 'sl-tabs' }, ...Object.values(this.tabs)),
           h('button', { type: 'button', class: 'sl-icon-btn', 'aria-label': '关闭', onclick: () => view.closePanel() }, svg(ICON.close))),
         this.body);
       this.trackChanged(true);
     }
-    show(tab) { this.tab = tab; for (const [k, b] of Object.entries(this.tabs)) b.classList.toggle('sl-on', k === tab); this.renderBody(); }
+    show(tab) {
+      if (tab === 'comments' && !(this.app.plugin && this.app.plugin.view)) tab = 'match';
+      const leaving = this.tab;
+      this.tab = tab;
+      for (const [k, b] of Object.entries(this.tabs)) b.classList.toggle('sl-on', k === tab);
+      const pv = this.app.plugin && this.app.plugin.view;
+      if (pv && leaving === 'comments' && tab !== 'comments') pv.deactivate();
+      if (pv && tab === 'comments') pv.activate();
+      this.renderBody();
+    }
     trackChanged(initial) {
       const track = this.app.currentTrack;
       this.query = track ? `${track.title} ${track.artists[0] || ''}`.trim() : '';
@@ -1389,7 +1416,26 @@
       if (track && (this.tab === 'match' || initial)) this.search();
     }
     engineChanged() { if (this.tab === 'match') this.renderStatus(); else this.renderBody(); }
-    renderBody() { this.body.replaceChildren(this.tab === 'match' ? this.matchTab() : this.settingsTab()); }
+    renderBody() {
+      const body = this.tab === 'match' ? this.matchTab()
+        : this.tab === 'comments' ? this.commentsTab()
+        : this.tab === 'plugins' ? this.pluginsTab() : this.settingsTab();
+      this.body.replaceChildren(body);
+    }
+    /* comments tab: mounts the plugin's own view; kept in a persistent wrapper
+     * so re-renders (engineChanged etc.) do not rebuild the comment list. */
+    commentsTab() {
+      const pv = this.app.plugin && this.app.plugin.view;
+      if (!pv) return h('div');
+      if (!this._commentsWrap || this._commentsWrap.firstChild !== pv.el) {
+        this._commentsWrap = h('div', { class: 'sl-comments-wrap' }, pv.el);
+      }
+      return this._commentsWrap;
+    }
+    /* plugins tab: add-on management (install / uninstall / open). */
+    pluginsTab() {
+      return h('div', { class: 'sl-settings' }, h('h3', null, '插件'), this.pluginRow());
+    }
     /* match tab */
     matchTab() {
       const app = this.app, info = app.trackInfo;
@@ -1641,8 +1687,6 @@
         h('h3', null, '时间校准'),
         offsetRow('全局偏移', globalOffset, v => engine.setOffset(v, true)),
         offsetRow('当前歌曲偏移', trackOffset, v => engine.setOffset(v, false), local ? undefined : '正值让歌词提前显示 · 上传按钮会随歌词一起上传'),
-        h('h3', null, '插件'),
-        this.pluginRow(),
         h('h3', null, '使用方式与网络'),
         modeRow,
         ...(local ? [] : [h('div', { class: 'sl-setting' }, h('span', { class: 'sl-setting-text' }, h('span', null, '服务器状态'), h('small', { class: serverState.ok ? 'sl-good-text' : serverState.ok === false ? 'sl-error' : '' }, serverLine)),
@@ -1669,13 +1713,15 @@
       const app = this.app, installed = !!app.store.setting('comments_plugin'), loaded = !!window.SpotLyricComments;
       const status = app.commentsError ? `加载失败：${app.commentsError}`
         : app.commentsMissing ? '已安装 · 插件文件缺失，请重新运行安装命令更新插件'
-        : installed ? loaded ? '已安装 · 歌词页右上角进入' : '已安装 · 重新加载界面后生效'
+        : installed ? loaded ? '已安装 · 右下角控制栏进入' : '已安装 · 重新加载界面后生效'
         : '在歌词页查看网易云音乐的热门与最新评论，支持登录、点赞和发布';
       return h('div', { class: 'sl-setting' },
         h('span', { class: 'sl-setting-text' }, h('span', null, '网易云评论区'),
           h('small', { class: app.commentsError || app.commentsMissing ? 'sl-error' : installed ? 'sl-good-text' : '' }, status)),
-        h('button', { type: 'button', class: installed ? 'sl-btn sl-btn-ghost sl-btn-small' : 'sl-btn sl-btn-green sl-btn-small',
-          onclick: () => this.toggleCommentsPlugin(installed) }, installed ? '卸载' : '安装'));
+        h('span', { class: 'sl-setting-actions' },
+          installed && loaded ? h('button', { type: 'button', class: 'sl-btn sl-btn-ghost sl-btn-small', onclick: () => this.view.openPanel('comments') }, '打开') : null,
+          h('button', { type: 'button', class: installed ? 'sl-btn sl-btn-ghost sl-btn-small' : 'sl-btn sl-btn-green sl-btn-small',
+            onclick: () => this.toggleCommentsPlugin(installed) }, installed ? '卸载' : '安装')));
     }
     async toggleCommentsPlugin(installed) {
       this.app.store.set('comments_plugin', !installed);
@@ -1683,7 +1729,7 @@
         title: installed ? '已卸载网易云评论区插件' : '已安装网易云评论区插件',
         body: installed
           ? '重新加载界面后移除评论区入口；也可以稍后自行重启 Spotify。'
-          : '重新加载界面后，歌词页右上角会出现评论区入口；也可以稍后自行重启 Spotify。',
+          : '重新加载界面后，歌词页右下角控制栏会出现评论区按钮；也可以稍后自行重启 Spotify。',
         confirm: '立即重启', cancel: '稍后',
       });
       if (ok) location.reload(); else this.renderBody();

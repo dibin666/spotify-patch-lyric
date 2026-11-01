@@ -76,14 +76,14 @@ function stubApp(track, match) {
   };
 }
 
-test('UI implements the standalone panel contract (el/show/close/toggle/buildEntry)', () => {
+test('UI implements the panel-tab contract (el/activate/deactivate)', () => {
   const { UI } = sandbox();
-  /* The comments plugin floats as its own right-docked panel: a top-right
-   * entry button toggles show()/close(); nothing is owned by the host panel. */
-  for (const fn of ['show', 'close', 'toggle', 'buildEntry']) {
+  /* The comments tab lives inside the shared side panel: the host mounts
+   * view.el once and drives it with activate()/deactivate(). */
+  for (const fn of ['activate', 'deactivate']) {
     assert.equal(typeof UI.prototype[fn], 'function', `${fn} missing`);
   }
-  for (const gone of ['activate', 'deactivate', 'buildButton']) {
+  for (const gone of ['buildEntry', 'buildButton', 'toggle', 'show', 'close']) {
     assert.equal(UI.prototype[gone], undefined, `${gone} should be removed`);
   }
 });

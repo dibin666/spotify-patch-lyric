@@ -27,14 +27,10 @@
 
   /* ------------------------------------------------------------ css ----- */
   const CSS = `
-/* Standalone floating panel docked to the right edge of the lyrics page:
- * its own view (not the shared settings/match panel), never covers everything. */
-.slc{position:absolute;top:0;right:0;bottom:0;width:min(400px,92%);z-index:6;display:flex;flex-direction:column;color:#fff;
-  font:400 .875rem/1.45 var(--encore-body-font-stack,sans-serif);animation:sl-slide .15s ease-out;
-  background:color-mix(in srgb,var(--lyrics-color-background) 30%,#0f0f0f);
-  border-left:1px solid rgba(255,255,255,.08);box-shadow:-10px 0 28px rgba(0,0,0,.4);
+/* The plugin's own page inside the shared side panel: fills the tab body. */
+.slc{display:flex;flex-direction:column;flex:1;min-height:0;height:100%;color:#fff;
+  font:400 .875rem/1.45 var(--encore-body-font-stack,sans-serif);
   user-select:text;-webkit-user-select:text}
-.slc-entry{position:absolute;top:14px;right:14px;z-index:5}
 .slc button{user-select:none;-webkit-user-select:none}
 .slc input{user-select:text;-webkit-user-select:text}
 .slc-head{display:flex;align-items:center;gap:10px;padding:12px 12px 8px;flex:none}
@@ -495,9 +491,7 @@
     constructor() {
       this.active = false; this.song = null; this.gen = 0; this.pollTimer = 0;
       this.buildPage();
-      this.buildEntry();
       this.loginDialog = null; this.loginTab = 'qr'; this.qr = { key: '', stopped: true };
-      this.entryBtn = null;
       /* Track changes while the comments tab is active reload the area. */
       this.key = '';
       this.pollTimer = setInterval(() => { if (this.active) this.checkTrack(); }, 1500);
@@ -509,8 +503,7 @@
       this.userBox = h('span', { class: 'slc-head-user' });
       this.refreshBtn = h('button', { type: 'button', class: 'sl-icon-btn', title: '刷新评论', 'aria-label': '刷新评论', onclick: () => this.refresh() }, svg(ICONS.refresh));
       this.head = h('div', { class: 'slc-head' },
-        this.titleEl, this.countEl, h('span', { class: 'slc-spacer' }), this.userBox, this.refreshBtn,
-        h('button', { type: 'button', class: 'sl-icon-btn', title: '关闭', 'aria-label': '关闭评论区', onclick: () => this.close() }, svg(ICONS.close)));
+        this.titleEl, this.countEl, h('span', { class: 'slc-spacer' }), this.userBox, this.refreshBtn);
       this.songEl = h('div', { class: 'slc-songwrap' });
       this.hotEl = h('div', { class: 'slc-list' });
       this.listEl = h('div', { class: 'slc-list' });
@@ -527,20 +520,17 @@
       this.inputBar.addEventListener('mousedown', e => { if (!account) { e.preventDefault(); this.showLogin(); } });
       this.el = h('div', { class: 'slc', role: 'region', 'aria-label': '网易云音乐评论区', 'data-testid': 'spot-lyric-comments' },
         this.head, this.scroll, this.inputBar);
-      this.el.style.display = 'none';
       this.sentinelObs = new IntersectionObserver(entries => {
         for (const e of entries) if (e.isIntersecting) this.loadMore();
       }, { root: this.scroll, rootMargin: '200px' });
       document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && this.active && !this.loginDialog) { e.stopPropagation(); this.close(); }
+        /* Escape closes the shared panel, not just this tab. */
+        if (e.key === 'Escape' && this.active && !this.loginDialog) { e.stopPropagation(); app.view.closePanel(); }
       }, true);
     }
-    toggle() { this.active ? this.close() : this.show(); }
-    show() {
+    activate() {
       if (this.active) return;
       this.active = true;
-      this.entryBtn.setAttribute('aria-pressed', 'true');
-      this.el.style.display = '';
       this.renderUser();
       /* MUSIC_U can expire silently between sessions: once per app start the
        * stored account is confirmed so a dead cookie does not linger. */
@@ -550,22 +540,10 @@
       }
       this.checkTrack(true);
     }
-    close() {
+    deactivate() {
       if (!this.active) return;
       this.active = false;
-      this.entryBtn.setAttribute('aria-pressed', 'false');
-      this.el.style.display = 'none';
       this.closeLogin();
-    }
-    /* Entry pinned to the top-right corner of the lyrics page (always
-     * visible — the bottom controls only appear on hover). One click toggles
-     * the standalone comments panel. */
-    buildEntry() {
-      this.entryBtn = h('button', {
-        type: 'button', class: 'sl-round slc-entry', 'aria-label': '网易云音乐评论区', 'aria-pressed': 'false',
-        title: '网易云音乐评论区', onclick: () => this.toggle(),
-      }, svg(ICONS.comment));
-      if (app.view && app.view.page) app.view.page.append(this.el, this.entryBtn);
     }
     /* Current playing song -> NetEase comment resource, following engine.match
      * first and the search fallback otherwise. */
@@ -1003,9 +981,9 @@
       document.head.append(style);
       await Promise.all([loadAccount(), loadDeviceId()]);
       const ui = new CommentsUI();
-      /* Host contract: the side panel mounts ui.el once and calls
-       * ui.activate() / ui.deactivate() as its comments tab is toggled. */
-      window.SpotLyricComments.view = ui;
+      /* Host contract: the side panel mounts view.el in its comments tab and
+       * calls view.activate() / view.deactivate() as the tab is toggled. */
+      window.SpotLyricComments.view = { el: ui.el, activate: () => ui.activate(), deactivate: () => ui.deactivate() };
       console.log('%c[spot-lyric]', 'color:#1ed760;font-weight:bold', 'comments plugin mounted');
     },
   };

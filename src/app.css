@@ -321,6 +321,7 @@ button.sl-pill-icon:hover { background: rgba(0, 0, 0, .6); }
 .sl-tab.sl-on, .sl-chip.sl-on { background: #fff; color: #000; }
 .sl-chip-filter { margin-left: auto; }
 .sl-panel-body { flex: 1; overflow-y: auto; padding: 4px 16px 16px; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .3) transparent; }
+.sl-comments-wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 
 .sl-match { display: flex; flex-direction: column; gap: 12px; min-height: 100%; }
 .sl-now { display: flex; gap: 12px; align-items: center; padding: 8px; border-radius: 6px; background: rgba(255, 255, 255, .05); }
