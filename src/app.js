@@ -373,11 +373,8 @@
       if (document.querySelector('script[src*="spot-lyric-comments.js"]')) return;
       const script = h('script', { src: '/spot-lyric/spot-lyric-comments.js', defer: 'defer' });
       script.onload = () => {
-        try {
-          window.SpotLyricComments && window.SpotLyricComments.mount(this.pluginHost());
-          (this._commentsCbs || []).forEach((cb) => { try { cb(); } catch (_) { /* keep the other callbacks */ } });
-          this._commentsCbs = null;
-        } catch (e) { console.error('[spot-lyric] comments plugin failed', e); this.commentsError = String(e && e.message || e); }
+        try { window.SpotLyricComments && window.SpotLyricComments.mount(this.pluginHost()); }
+        catch (e) { console.error('[spot-lyric] comments plugin failed', e); this.commentsError = String(e && e.message || e); }
       };
       script.onerror = () => { this.commentsMissing = true; log('comments plugin file missing'); };
       document.head.append(script);
@@ -389,12 +386,6 @@
         app: this, Core, h, svg, ICON, NAMES, toast, confirmDialog, applyTheme, setVar, setText, fmtTime,
         transport: providerTransport, http: this.engine.http, version: VERSION,
         reload: () => location.reload(),
-        /* The plugin script loads async: cb runs once its view contract
-         * (window.SpotLyricComments.view) exists, immediately when it already does. */
-        commentsReady: (cb) => {
-          if (window.SpotLyricComments && window.SpotLyricComments.view) cb();
-          else (this._commentsCbs || (this._commentsCbs = [])).push(cb);
-        },
       };
       return this._host;
     }
@@ -1371,7 +1362,6 @@
     }
     closePanel() {
       if (!this.panel) return;
-      if (this.panel.tab === 'comments') { const v = window.SpotLyricComments && window.SpotLyricComments.view; v && v.deactivate(); }
       this.panel.el.remove(); this.panel = null;
       this.page.focus({ preventScroll: true });
     }
@@ -1382,29 +1372,15 @@
     constructor(app, view) {
       this.app = app; this.view = view; this.tab = 'match'; this.result = null; this.providerTab = app.store.setting('preferred_provider');
       this.selected = null; this.preview = null; this.searching = false; this.query = '';
-      this.tabs = {
-        match: h('button', { type: 'button', class: 'sl-tab', onclick: () => this.show('match') }, '匹配歌词'),
-        comments: h('button', { type: 'button', class: 'sl-tab', onclick: () => this.show('comments') }, '评论'),
-        settings: h('button', { type: 'button', class: 'sl-tab', onclick: () => this.show('settings') }, '设置'),
-      };
+      this.tabs = { match: h('button', { type: 'button', class: 'sl-tab', onclick: () => this.show('match') }, '匹配歌词'), settings: h('button', { type: 'button', class: 'sl-tab', onclick: () => this.show('settings') }, '设置') };
       this.body = h('div', { class: 'sl-panel-body' });
       this.el = h('aside', { class: 'sl-panel', 'aria-label': '歌词面板' },
         h('header', { class: 'sl-panel-head' }, h('div', { class: 'sl-tabs' }, this.tabs.match, this.tabs.settings),
           h('button', { type: 'button', class: 'sl-icon-btn', 'aria-label': '关闭', onclick: () => view.closePanel() }, svg(ICON.close))),
         this.body);
-      /* The comments tab only appears once the optional plugin has mounted; the
-       * script tag may still be in flight when this panel is constructed. */
-      if (window.SpotLyricComments && window.SpotLyricComments.view) this.addCommentsTab();
-      app.pluginHost().commentsReady(() => this.addCommentsTab());
       this.trackChanged(true);
     }
-    show(tab) {
-      const prev = this.tab;
-      this.tab = tab;
-      for (const [k, b] of Object.entries(this.tabs)) b.classList.toggle('sl-on', k === tab);
-      if (prev === 'comments' && tab !== 'comments') { const v = window.SpotLyricComments && window.SpotLyricComments.view; v && v.deactivate(); }
-      this.renderBody();
-    }
+    show(tab) { this.tab = tab; for (const [k, b] of Object.entries(this.tabs)) b.classList.toggle('sl-on', k === tab); this.renderBody(); }
     trackChanged(initial) {
       const track = this.app.currentTrack;
       this.query = track ? `${track.title} ${track.artists[0] || ''}`.trim() : '';
@@ -1413,19 +1389,7 @@
       if (track && (this.tab === 'match' || initial)) this.search();
     }
     engineChanged() { if (this.tab === 'match') this.renderStatus(); else this.renderBody(); }
-    renderBody() { this.body.replaceChildren(this.tab === 'match' ? this.matchTab() : this.tab === 'comments' ? this.commentsTab() : this.settingsTab()); }
-    /* comments tab: the plugin owns one static root element; replaceChildren just
-     * moves it here from wherever it was mounted before. */
-    commentsTab() {
-      const v = window.SpotLyricComments && window.SpotLyricComments.view;
-      if (!v) return h('div', { class: 'sl-status' }, '评论插件尚未加载，请在「设置 → 插件」中安装后重启 Spotify');
-      v.activate();
-      return v.el;
-    }
-    addCommentsTab() {
-      if (this.tabs.comments.isConnected) return;
-      this.tabs.settings.before(this.tabs.comments);
-    }
+    renderBody() { this.body.replaceChildren(this.tab === 'match' ? this.matchTab() : this.settingsTab()); }
     /* match tab */
     matchTab() {
       const app = this.app, info = app.trackInfo;
@@ -1535,10 +1499,26 @@
       box.append(h('p', { class: 'sl-preview-reason' + (c.eligible ? ' sl-good-text' : '') }, c.reason));
       if (!this.preview) box.append(h('div', { class: 'sl-loader sl-loader-small' }, h('i'), h('i'), h('i')));
       else if (this.preview.error) box.append(h('p', { class: 'sl-error' }, this.preview.error));
-      else if (!Core.lyricsUsable(this.preview.lyrics)) box.append(h('p', { class: 'sl-empty-text' }, ({
-        missing: 'QQ 音乐未收录这首歌的歌词', uncollected: '网易云音乐暂未收录这首歌的歌词',
-        credits: '只有作词 / 作曲信息，没有歌词正文', instrumental: '纯音乐，没有歌词',
-      })[this.preview.lyrics && this.preview.lyrics.note] || '这个结果没有歌词'));
+      else if (!Core.lyricsUsable(this.preview.lyrics)) {
+        box.append(h('p', { class: 'sl-empty-text' }, ({
+          missing: 'QQ 音乐未收录这首歌的歌词', uncollected: '网易云音乐暂未收录这首歌的歌词',
+          credits: '只有作词 / 作曲信息，没有歌词正文', instrumental: '纯音乐，没有歌词',
+        })[this.preview.lyrics && this.preview.lyrics.note] || '这个结果没有歌词'));
+        /* An instrumental still binds as a song: the binding marks the track and
+         * lets the comments plugin resolve this NetEase song's comment area. */
+        if (this.preview.lyrics && this.preview.lyrics.note === 'instrumental') {
+          box.append(h('div', { class: 'sl-preview-actions' },
+            h('button', { type: 'button', class: 'sl-btn sl-btn-green', onclick: async (event) => {
+              const button = event.currentTarget; button.disabled = true;
+              try {
+                const ok = await this.app.engine.bind(c, this.preview.lyrics);
+                toast(ok ? '已绑定纯音乐歌曲' : '保存失败');
+                this.search();
+              } catch (e) { toast('保存失败：' + (e.message || e)); button.disabled = false; }
+            } }, '绑定此歌曲'),
+            h('button', { type: 'button', class: 'sl-btn sl-btn-ghost', onclick: () => { this.selected = null; this.renderResults(); } }, '取消')));
+        }
+      }
       else {
         const lyrics = this.preview.lyrics;
         const kind = { word: '逐字同步', line: '逐行同步', unsynced: '未同步' }[lyrics.sync_type];
@@ -1689,7 +1669,7 @@
       const app = this.app, installed = !!app.store.setting('comments_plugin'), loaded = !!window.SpotLyricComments;
       const status = app.commentsError ? `加载失败：${app.commentsError}`
         : app.commentsMissing ? '已安装 · 插件文件缺失，请重新运行安装命令更新插件'
-        : installed ? loaded ? '已安装 · 面板「评论」页签进入' : '已安装 · 重新加载界面后生效'
+        : installed ? loaded ? '已安装 · 歌词页右上角进入' : '已安装 · 重新加载界面后生效'
         : '在歌词页查看网易云音乐的热门与最新评论，支持登录、点赞和发布';
       return h('div', { class: 'sl-setting' },
         h('span', { class: 'sl-setting-text' }, h('span', null, '网易云评论区'),
@@ -1703,7 +1683,7 @@
         title: installed ? '已卸载网易云评论区插件' : '已安装网易云评论区插件',
         body: installed
           ? '重新加载界面后移除评论区入口；也可以稍后自行重启 Spotify。'
-          : '重新加载界面后，面板的「评论」页签即出现；也可以稍后自行重启 Spotify。',
+          : '重新加载界面后，歌词页右上角会出现评论区入口；也可以稍后自行重启 Spotify。',
         confirm: '立即重启', cancel: '稍后',
       });
       if (ok) location.reload(); else this.renderBody();

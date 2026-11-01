@@ -31,6 +31,8 @@ var allowedPaths = map[string]bool{
 	"/weapi/login": true, "/weapi/login/cellphone": true, "/weapi/login/token/refresh": true,
 	"/weapi/login/qrcode/unikey": true, "/weapi/login/qrcode/client/login": true, "/weapi/logout": true,
 	"/weapi/captcha/sent": true, "/weapi/captcha/verify": true, "/weapi/sms/captcha/verify": true, "/weapi/w/nuser/account/get": true,
+	"/eapi/login": true, "/eapi/w/login/cellphone": true, "/eapi/login/token/refresh": true,
+	"/eapi/login/qrcode/unikey": true, "/eapi/login/qrcode/client/login": true,
 	"/weapi/v1/comment/like": true, "/weapi/v1/resource/comments/add": true, "/weapi/v1/resource/comments/delete": true,
 }
 
@@ -143,7 +145,7 @@ func newTransport(neteaseRealIP string, qqGap, neteaseGap time.Duration) Transpo
 		headers.Set("Accept", "application/json")
 		for name, value := range r.Headers {
 			switch strings.ToLower(name) {
-			case "referer", "content-type", "accept", "cookie":
+			case "referer", "content-type", "accept", "cookie", "user-agent":
 				headers.Set(name, value)
 			}
 		}

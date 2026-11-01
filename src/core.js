@@ -1036,9 +1036,16 @@
             this.http.cacheHit();
             ui.status(manual ? '已绑定歌词 · 缓存' : '歌词缓存'); return;
           }
+          /* A deliberately bound instrumental song restores as-is: "纯音乐" plus
+           * the song itself, which the comments view needs to resolve comments. */
+          if (manual && entry.lyrics && entry.lyrics.note === 'instrumental' && entry.match) {
+            ui.install(entry.lyrics, entry.colors, candidateFromJson(entry.match), 'manual');
+            this.http.cacheHit();
+            ui.status('纯音乐，没有歌词'); return;
+          }
         }
         const negative = await this.store.cacheGet(negativeKey); check();
-        if (negative) { this.http.cacheHit(); ui.status(negative); return; }
+        if (negative && !manual) { this.http.cacheHit(); ui.status(negative); return; }
       } else {
         await this.store.cacheRemove(lyricsKey); await this.store.cacheRemove(negativeKey);
         if (saved) await this.store.cacheRemove(`${LYRICS_CACHE}:${saved.provider}:${saved.id}`);
@@ -1138,8 +1145,14 @@
       try { lyrics = await this.providerFetch(candidate, job.signal, job.lyricsBudget); }
       catch (e) { if (e.kind === 'cancelled') throw CANCELLED; job.failed = true; }
       job.check();
-      /* An eligible match that the source marks as instrumental is a final answer (LDDC). */
-      if (lyrics && lyrics.note === 'instrumental' && !manual) { await this._complete(job, null, '纯音乐，没有歌词'); return true; }
+      /* An eligible match that the source marks as instrumental is a final answer (LDDC) —
+       * except a manual choice, which binds the song itself (comments can then use it). */
+      if (lyrics && lyrics.note === 'instrumental') {
+        if (!manual) { await this._complete(job, null, '纯音乐，没有歌词'); return true; }
+        await this.store.matchSave(job.track, candidate, manual);
+        await this._complete(job, lyrics, `纯音乐，没有歌词 · 已绑定 ${PROVIDER_NAMES[candidate.provider]}`, null, candidate, 'manual');
+        return true;
+      }
       if (!lyricsUsable(lyrics)) return false;
       await this.store.matchSave(job.track, candidate, manual);
       await this._complete(job, lyrics, `${manual ? '已绑定' : '已匹配'}歌词 · ${PROVIDER_NAMES[candidate.provider]}`, null, candidate, manual ? 'manual' : 'auto');
@@ -1150,6 +1163,12 @@
       job.ui.install(lyrics, colors, match, origin);
       if (lyricsUsable(lyrics)) {
         const entry = { lyrics, colors: colors || null, match: match ? candidateJson(match) : null, origin: origin || null };
+        await this.store.cachePut(TRACK_CACHE + job.key, JSON.stringify(entry), 0);
+        await this.store.cacheRemove(NEGATIVE + job.key);
+      } else if (lyrics && lyrics.note === 'instrumental' && match) {
+        /* Bound instrumentals cache like a hit: the next play restores song + status
+         * without a refetch (the restore branch above reads this shape). */
+        const entry = { lyrics, colors: null, match: candidateJson(match), origin: origin || null };
         await this.store.cachePut(TRACK_CACHE + job.key, JSON.stringify(entry), 0);
         await this.store.cacheRemove(NEGATIVE + job.key);
       } else if (!(job.failed && job.ui === SILENT)) {
@@ -1268,7 +1287,8 @@
     preview(candidate) { return this.providerFetch(candidate, null, { remaining: 2 }); }
     /* "使用此歌词": bound on this machine only (the upload button shares it). */
     async bind(candidate, lyrics) {
-      if (!lyricsUsable(lyrics) || !this.track) return false;
+      const instrumental = !!(lyrics && lyrics.note === 'instrumental');
+      if ((!lyricsUsable(lyrics) && !instrumental) || !this.track) return false;
       this._interrupt();
       const track = this.track, key = trackKey(track);
       this.prefetched.delete(key);
@@ -1276,7 +1296,8 @@
       await this.store.kvSet('local-lyrics:' + key, '');
       await this.store.cacheRemove(NEGATIVE + key);
       await this.store.cachePut(TRACK_CACHE + key, JSON.stringify({ lyrics, colors: null, match: candidateJson(candidate), origin: 'manual' }), 0);
-      this._install(lyrics, null, candidate, 'manual'); this._setStatus(`已绑定歌词 · ${PROVIDER_NAMES[candidate.provider]}`);
+      this._install(lyrics, null, candidate, 'manual');
+      this._setStatus(instrumental ? `纯音乐，没有歌词 · 已绑定 ${PROVIDER_NAMES[candidate.provider]}` : `已绑定歌词 · ${PROVIDER_NAMES[candidate.provider]}`);
       return true;
     }
     /* Drops the binding and local lyrics on this machine, then matches again (the server copy,

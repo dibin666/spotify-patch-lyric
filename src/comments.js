@@ -27,11 +27,14 @@
 
   /* ------------------------------------------------------------ css ----- */
   const CSS = `
-/* Static content inside the host side panel (.sl-panel-body, ~360-420px):
- * no overlay positioning — the host owns the box and re-uses this element. */
-.slc{display:flex;flex-direction:column;height:100%;min-height:0;color:#fff;
-  font:400 .875rem/1.45 var(--encore-body-font-stack,sans-serif);animation:sl-fade .15s ease-out;
+/* Standalone floating panel docked to the right edge of the lyrics page:
+ * its own view (not the shared settings/match panel), never covers everything. */
+.slc{position:absolute;top:0;right:0;bottom:0;width:min(400px,92%);z-index:6;display:flex;flex-direction:column;color:#fff;
+  font:400 .875rem/1.45 var(--encore-body-font-stack,sans-serif);animation:sl-slide .15s ease-out;
+  background:color-mix(in srgb,var(--lyrics-color-background) 30%,#0f0f0f);
+  border-left:1px solid rgba(255,255,255,.08);box-shadow:-10px 0 28px rgba(0,0,0,.4);
   user-select:text;-webkit-user-select:text}
+.slc-entry{position:absolute;top:14px;right:14px;z-index:5}
 .slc button{user-select:none;-webkit-user-select:none}
 .slc input{user-select:text;-webkit-user-select:text}
 .slc-head{display:flex;align-items:center;gap:10px;padding:12px 12px 8px;flex:none}
@@ -345,8 +348,8 @@
   const budget = { remaining: 500 };
   async function api(method, url, { body, headers, signal } = {}) {
     const reqHeaders = { Referer: 'https://music.163.com/', Accept: 'application/json', ...(headers || {}) };
-    const cookie = jarHeader();
-    if (cookie) reqHeaders.Cookie = cookie;
+    const cookie = [reqHeaders.Cookie, jarHeader()].filter(Boolean).join('; ');
+    if (cookie) reqHeaders.Cookie = cookie; else delete reqHeaders.Cookie;
     let response;
     try {
       response = await app.engine.http.request('netease', {
@@ -363,6 +366,55 @@
   async function weapi(path, params, signal) {
     const body = await weapiBody({ ...params, csrf_token: csrfToken() });
     return api('POST', NETEASE + path, { body, headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, signal });
+  }
+
+  /* ------------------------------------------------------------ eapi ---- */
+  /* The weapi sign-in endpoints are risk-walled for unknown devices now, so
+   * sign-in runs through eapi — the desktop client's own channel
+   * (interface3.music.163.com). Envelope: the JSON payload carries a `header`
+   * blob with the fake device config, then
+   *   data   = apiPath + "-36cd479b6b5-" + payload + "-36cd479b6b5-" + md5("nobody"+apiPath+"use"+payload+"md5forencrypt")
+   *   params = AES-128-ECB(data, "e82ckenh8dichen8") hex uppercase
+   * WebCrypto has no ECB mode: AES-CBC with a zero IV on a single block IS ECB,
+   * so each 16-byte block is encrypted separately and the first 16 output
+   * bytes kept (the rest is the auto-added padding block). */
+  const EAPI_HOST = 'https://interface3.music.163.com';
+  const EAPI_KEY = 'e82ckenh8dichen8';
+  const EAPI_DEVICE_KEY = 'netease:comments:device';
+  let eapiDeviceId = '';
+  async function loadDeviceId() {
+    try { eapiDeviceId = String(await app.store.kvGet(EAPI_DEVICE_KEY) || ''); } catch (_) { /* new device */ }
+    if (!/^[0-9a-f]{32}$/i.test(eapiDeviceId)) {
+      eapiDeviceId = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+      app.store.kvSet(EAPI_DEVICE_KEY, eapiDeviceId);
+    }
+  }
+  const eapiConfig = () => ({ os: 'iPhone OS', appver: '10.0.0', osver: '16.2', channel: 'distribution', deviceId: eapiDeviceId });
+  const eapiCookie = () => { const c = eapiConfig(); return `os=${encodeURIComponent(c.os)}; appver=${c.appver}; osver=${c.osver}; channel=${c.channel}; deviceId=${c.deviceId}`; };
+  const pkcs7 = (bytes, bs = 16) => {
+    const pad = bs - (bytes.length % bs), out = new Uint8Array(bytes.length + pad);
+    out.set(bytes); out.fill(pad, bytes.length); return out;
+  };
+  const hexU = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+  async function eapiBody(ep, params) {
+    const payload = JSON.stringify({ ...params, header: JSON.stringify({ ...eapiConfig(), requestId: String(20000000 + Math.floor(Math.random() * 1e7)) }) });
+    const apiPath = ep.replace('/eapi/', '/api/');
+    const digest = md5(`nobody${apiPath}use${payload}md5forencrypt`);
+    const text = `${apiPath}-36cd479b6b5-${payload}-36cd479b6b5-${digest}`;
+    const bytes = pkcs7(new TextEncoder().encode(text));
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(EAPI_KEY), 'AES-CBC', false, ['encrypt']);
+    const iv = new Uint8Array(16), out = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i += 16) {
+      const block = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-CBC', iv }, key, bytes.slice(i, i + 16)));
+      out.set(block.slice(0, 16), i);
+    }
+    return `params=${hexU(out)}`;
+  }
+  async function eapi(path, params, signal) {
+    const body = await eapiBody(path, params);
+    /* The desktop client also sends its device config as cookies. */
+    const headers = { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: eapiCookie() };
+    return api('POST', EAPI_HOST + path, { body, headers, signal });
   }
 
   /* -------------------------------------------------------- comments ---- */
@@ -457,7 +509,8 @@
       this.userBox = h('span', { class: 'slc-head-user' });
       this.refreshBtn = h('button', { type: 'button', class: 'sl-icon-btn', title: '刷新评论', 'aria-label': '刷新评论', onclick: () => this.refresh() }, svg(ICONS.refresh));
       this.head = h('div', { class: 'slc-head' },
-        this.titleEl, this.countEl, h('span', { class: 'slc-spacer' }), this.userBox, this.refreshBtn);
+        this.titleEl, this.countEl, h('span', { class: 'slc-spacer' }), this.userBox, this.refreshBtn,
+        h('button', { type: 'button', class: 'sl-icon-btn', title: '关闭', 'aria-label': '关闭评论区', onclick: () => this.close() }, svg(ICONS.close)));
       this.songEl = h('div', { class: 'slc-songwrap' });
       this.hotEl = h('div', { class: 'slc-list' });
       this.listEl = h('div', { class: 'slc-list' });
@@ -474,23 +527,20 @@
       this.inputBar.addEventListener('mousedown', e => { if (!account) { e.preventDefault(); this.showLogin(); } });
       this.el = h('div', { class: 'slc', role: 'region', 'aria-label': '网易云音乐评论区', 'data-testid': 'spot-lyric-comments' },
         this.head, this.scroll, this.inputBar);
+      this.el.style.display = 'none';
       this.sentinelObs = new IntersectionObserver(entries => {
         for (const e of entries) if (e.isIntersecting) this.loadMore();
       }, { root: this.scroll, rootMargin: '200px' });
       document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && this.active && !this.loginDialog) {
-          e.stopPropagation();
-          /* Esc closes the host panel (which deactivates us), like match/settings. */
-          if (app.view && app.view.closePanel) app.view.closePanel(); else this.deactivate();
-        }
+        if (e.key === 'Escape' && this.active && !this.loginDialog) { e.stopPropagation(); this.close(); }
       }, true);
     }
-    /* The host panel owns this.el and drives visibility: activate() runs when
-     * the comments tab is selected, deactivate() when switching away. The same
-     * element is re-used — nothing is appended or removed here. */
-    activate() {
+    toggle() { this.active ? this.close() : this.show(); }
+    show() {
       if (this.active) return;
       this.active = true;
+      this.entryBtn.setAttribute('aria-pressed', 'true');
+      this.el.style.display = '';
       this.renderUser();
       /* MUSIC_U can expire silently between sessions: once per app start the
        * stored account is confirmed so a dead cookie does not linger. */
@@ -500,21 +550,22 @@
       }
       this.checkTrack(true);
     }
-    deactivate() {
+    close() {
       if (!this.active) return;
       this.active = false;
+      this.entryBtn.setAttribute('aria-pressed', 'false');
+      this.el.style.display = 'none';
       this.closeLogin();
     }
-    /* Round button in the lyrics controls bar: one click opens the host panel
-     * straight on the comments tab. */
+    /* Entry pinned to the top-right corner of the lyrics page (always
+     * visible — the bottom controls only appear on hover). One click toggles
+     * the standalone comments panel. */
     buildEntry() {
       this.entryBtn = h('button', {
-        type: 'button', class: 'sl-round slc-entry', 'aria-label': '网易云音乐评论区',
-        title: '网易云音乐评论区',
-        onclick: () => { if (app.view && app.view.openPanel) app.view.openPanel('comments'); },
+        type: 'button', class: 'sl-round slc-entry', 'aria-label': '网易云音乐评论区', 'aria-pressed': 'false',
+        title: '网易云音乐评论区', onclick: () => this.toggle(),
       }, svg(ICONS.comment));
-      const right = app.view && app.view.controls && app.view.controls.querySelector('.sl-controls-right');
-      if (right) right.append(this.entryBtn);
+      if (app.view && app.view.page) app.view.page.append(this.el, this.entryBtn);
     }
     /* Current playing song -> NetEase comment resource, following engine.match
      * first and the search fallback otherwise. */
@@ -526,6 +577,7 @@
       const probe = match && match.provider === 'netease' ? `${match.provider}:${match.id}` : `search:${engine.track.uri || engine.track.title}`;
       if (!force && probe === this.key) return;
       this.key = probe;
+      this.song = null;   /* drop the previous song before the spinner shows */
       const gen = ++this.gen;
       this.setState('loading');
       let song = null, error = '';
@@ -607,14 +659,22 @@
     setState(kind, detail) {
       const box = this.stateEl;
       const clear = () => { box.replaceChildren(); box.hidden = true; };
+      /* Every non-ready state drops the previous song's rows immediately — the
+       * old comments must never linger under a loader or an error message. */
+      const clearContent = () => {
+        this.renderSongHeader(null);
+        this.hotEl.replaceChildren(); this.listEl.replaceChildren();
+        this.renderSentinel(null); this.sentinelObs.disconnect();
+      };
       if (kind === 'loading' || kind === 'matching') {
+        clearContent();
         box.hidden = false;
         box.replaceChildren(h('div', { class: 'sl-loader', 'aria-label': '正在加载' }, h('i'), h('i'), h('i')),
           h('p', { class: 'slc-state-sub' }, kind === 'matching' ? '正在匹配歌词…' : '正在加载评论…'));
-        if (kind === 'matching') { this.renderSongHeader(null); this.renderList(true); }
         return;
       }
       const show = (title, sub, action) => {
+        clearContent();
         box.hidden = false;
         box.replaceChildren(h('p', { class: 'slc-state-title' }, title),
           ...(sub ? [h('p', { class: 'slc-state-sub' }, sub)] : []), ...(action ? [action] : []));
@@ -814,7 +874,7 @@
       const session = this.qr = { key: '', stopped: false };
       let unikey;
       try {
-        const { data } = await api('POST', `${NETEASE}/api/login/qrcode/unikey`, { body: 'type=1', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+        const { data } = await eapi('/eapi/login/qrcode/unikey', { type: '1', noCheckToken: 'true' });
         if (!data || data.code !== 200 || !data.unikey) throw new Error('获取二维码失败');
         unikey = data.unikey;
       } catch (e) { if (!session.stopped) { setText(text, '获取二维码失败：' + (e.message || e)); } return; }
@@ -836,7 +896,7 @@
         if (session.stopped || this.loginTab !== 'qr') return;
         if (Date.now() > session.deadline) { setText(text, '二维码已过期，请点击下方刷新'); session.stopped = true; return; }
         try {
-          const { data } = await api('POST', `${NETEASE}/api/login/qrcode/client/login`, { body: `key=${encodeURIComponent(unikey)}&type=1`, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+          const { data } = await eapi('/eapi/login/qrcode/client/login', { type: '1', noCheckToken: 'true', key: unikey });
           if (session.stopped) return;
           const code = data && data.code;
           if (code === 803) {
@@ -894,24 +954,16 @@
       if (!secret) { this.loginError(this._phoneMode === 'password' ? '请输入密码' : '请输入验证码'); return; }
       btn.disabled = true; this.loginError('');
       try {
-        /* Official web flow: verify the captcha first — besides validating the
-         * code it marks this device as captcha-verified, which is what lets the
-         * following login past the "请确认是否本人账号" device check. */
-        if (this._phoneMode === 'captcha') {
-          const { data: v } = await weapi('/weapi/sms/captcha/verify', { ctcode: '86', cellphone: phone, captcha: secret });
-          if (v && v.code !== 200 && v.data !== true) {
-            this.loginError('验证失败：' + (v.message || v.msg || '验证码错误或已过期'));
-            return;
-          }
-        }
-        const params = { phone, countrycode: '86', rememberLogin: 'true' };
+        /* Desktop-client channel (eapi): the phone login the official app uses.
+         * checkToken is where a slider token would go on the strictest accounts. */
+        const params = { type: '1', phone, remember: 'true', countrycode: '86', checkToken: '' };
         if (this._phoneMode === 'captcha') params.captcha = secret; else params.password = md5(secret);
-        const { data } = await weapi('/weapi/login/cellphone', params);
+        const { data } = await eapi('/eapi/w/login/cellphone', params);
         if (data && data.code === 200 && data.cookie) captureBodyCookie(data.cookie);
         if (data && data.code === 200) { this.finishLogin(); return; }
         const msg = (data && (data.message || data.msg)) || `code ${data && data.code}`;
-        /* The device-trust wall survives correct credentials on protected
-         * accounts: point at the QR path, which the logged-in app authorizes. */
+        /* Account-level protection still wins: point at the QR path, which the
+         * logged-in app authorizes by design. */
         const hint = /本人账号|设备|验证/.test(msg) || (data && data.code === 509)
           ? '（该账号触发了新设备验证，建议改用「扫码登录」，由已登录的网易云 App 授权）' : '';
         this.loginError('登录失败：' + msg + hint);
@@ -932,7 +984,7 @@
       if (!pass) { this.loginError('请输入密码'); return; }
       btn.disabled = true; this.loginError('');
       try {
-        const { data } = await weapi('/weapi/login', { username: email.trim(), password: md5(pass), rememberLogin: 'true' });
+        const { data } = await eapi('/eapi/login', { type: '1', username: email.trim(), remember: 'true', password: md5(pass) });
         if (data && data.code === 200 && data.cookie) captureBodyCookie(data.cookie);
         if (data && data.code === 200) { this.finishLogin(); return; }
         this.loginError('登录失败：' + (data && (data.message || data.msg) || `code ${data && data.code}`));
@@ -949,7 +1001,7 @@
       const style = document.createElement('style');
       style.textContent = CSS;
       document.head.append(style);
-      await loadAccount();
+      await Promise.all([loadAccount(), loadDeviceId()]);
       const ui = new CommentsUI();
       /* Host contract: the side panel mounts ui.el once and calls
        * ui.activate() / ui.deactivate() as its comments tab is toggled. */

@@ -76,13 +76,14 @@ function stubApp(track, match) {
   };
 }
 
-test('UI implements the side-panel contract (el/activate/deactivate)', () => {
+test('UI implements the standalone panel contract (el/show/close/toggle/buildEntry)', () => {
   const { UI } = sandbox();
-  /* The host panel mounts ui.el once and toggles the comments tab through
-   * activate()/deactivate(); the old overlay API is gone. */
-  assert.equal(typeof UI.prototype.activate, 'function');
-  assert.equal(typeof UI.prototype.deactivate, 'function');
-  for (const gone of ['buildButton', 'show', 'close', 'toggle']) {
+  /* The comments plugin floats as its own right-docked panel: a top-right
+   * entry button toggles show()/close(); nothing is owned by the host panel. */
+  for (const fn of ['show', 'close', 'toggle', 'buildEntry']) {
+    assert.equal(typeof UI.prototype[fn], 'function', `${fn} missing`);
+  }
+  for (const gone of ['activate', 'deactivate', 'buildButton']) {
     assert.equal(UI.prototype[gone], undefined, `${gone} should be removed`);
   }
 });
