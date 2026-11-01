@@ -38,7 +38,7 @@ var allowedPaths = map[string]bool{
  * the path) and the unencrypted variants of the plugin's calls. */
 var neteasePathPrefixes = []string{
 	"/api/v1/resource/comments/", "/api/v1/comment/",
-	"/api/login", "/api/w/", "/api/captcha", "/api/logout",
+	"/api/login", "/api/w/", "/api/captcha", "/api/sms/", "/api/logout",
 }
 
 func relayAllowed(method, href string) bool {

@@ -20,6 +20,7 @@ const HOOK = `
   md5, qrMatrix, weapiBody, rsaSecretKey, normComment, songState, fetchPage, resolveSong,
   jar: () => jar, jarHeader, captureBodyCookie, api, accountStatus,
   account: () => account,
+  UI: CommentsUI,
   setHost(x) { app = x.app; Core = x.Core; h = x.h; svg = x.svg; toast = x.toast; confirmDialog = x.confirmDialog; },
   setAccount(a) { account = a; },
 };`;
@@ -74,6 +75,17 @@ function stubApp(track, match) {
     calls,
   };
 }
+
+test('UI implements the side-panel contract (el/activate/deactivate)', () => {
+  const { UI } = sandbox();
+  /* The host panel mounts ui.el once and toggles the comments tab through
+   * activate()/deactivate(); the old overlay API is gone. */
+  assert.equal(typeof UI.prototype.activate, 'function');
+  assert.equal(typeof UI.prototype.deactivate, 'function');
+  for (const gone of ['buildButton', 'show', 'close', 'toggle']) {
+    assert.equal(UI.prototype[gone], undefined, `${gone} should be removed`);
+  }
+});
 
 test('md5 matches RFC test vectors', () => {
   const { md5 } = sandbox();

@@ -7,7 +7,9 @@
  *
  * It registers window.SpotLyricComments.mount(host); host is the surface app.js
  * exposes: { app, Core, h, svg, ICON, NAMES, toast, confirmDialog, http, version,
- * reload }. NetEase requests go through the same transport as lyrics:
+ * reload }. mount() leaves the view in window.SpotLyricComments.view
+ * ({ el, activate, deactivate }) for the host's side-panel comments tab.
+ * NetEase requests go through the same transport as lyrics:
  * direct (--disable-web-security) -> local service -> lyrics server relay.
  * Sign-in cookies travel as a Cookie header through the relay, or via the
  * browser jar with credentials:include on the direct path.
@@ -25,13 +27,14 @@
 
   /* ------------------------------------------------------------ css ----- */
   const CSS = `
-.slc{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;color:#fff;
+/* Static content inside the host side panel (.sl-panel-body, ~360-420px):
+ * no overlay positioning — the host owns the box and re-uses this element. */
+.slc{display:flex;flex-direction:column;height:100%;min-height:0;color:#fff;
   font:400 .875rem/1.45 var(--encore-body-font-stack,sans-serif);animation:sl-fade .15s ease-out;
-  background:color-mix(in srgb,var(--lyrics-color-background) 30%,#0f0f0f);}
-.slc-head{display:flex;align-items:center;gap:10px;padding:16px 24px 10px;flex:none}
-.slc-back{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:50%;
-  background:rgba(0,0,0,.3);color:#fff;cursor:pointer;transition:background-color .2s}
-.slc-back:hover{background:rgba(0,0,0,.5)}
+  user-select:text;-webkit-user-select:text}
+.slc button{user-select:none;-webkit-user-select:none}
+.slc input{user-select:text;-webkit-user-select:text}
+.slc-head{display:flex;align-items:center;gap:10px;padding:12px 12px 8px;flex:none}
 .slc-title{font:700 1.25rem/1.2 var(--encore-title-font-stack,sans-serif)}
 .slc-count{color:rgba(255,255,255,.55);font-size:.8125rem;align-self:flex-end;padding-bottom:2px}
 .slc-spacer{flex:1}
@@ -41,7 +44,7 @@
 .slc-user img{width:24px;height:24px;border-radius:50%;object-fit:cover;background:#282828;flex:none}
 .slc-user span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .slc-user.slc-login-btn{padding:4px 14px}
-.slc-scroll{flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:0 24px 24px;
+.slc-scroll{flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:0 12px 12px;
   scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.3) transparent}
 .slc-scroll::-webkit-scrollbar{width:12px}
 .slc-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.3);border:3px solid transparent;background-clip:padding-box;border-radius:6px}
@@ -70,15 +73,18 @@
 .slc-like:disabled{cursor:default;opacity:.6}
 .slc-more{padding:18px;text-align:center;color:#8a8a8a;font-size:.8125rem}
 .slc-state{display:flex;flex-direction:column;align-items:center;gap:8px;padding:56px 24px;text-align:center;color:#b3b3b3}
+/* display:flex above would override the [hidden] attribute — keep it explicit. */
+.slc-state[hidden]{display:none}
 .slc-state-title{margin:0;color:#fff;font:700 1.1rem/1.3 var(--encore-title-font-stack,sans-serif)}
 .slc-state-sub{margin:0;max-width:420px;font-size:.8125rem}
-.slc-input{display:flex;gap:10px;padding:12px 24px 18px;flex:none;border-top:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.22)}
+.slc-input{display:flex;gap:10px;padding:12px 12px 14px;flex:none;border-top:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.22)}
 .slc-input input{flex:1;min-width:0;height:38px;padding:0 16px;border:0;border-radius:500px;outline:none;
   background:rgba(255,255,255,.1);color:#fff;font:inherit;transition:box-shadow .1s}
 .slc-input input::placeholder{color:#8a8a8a}
 .slc-input input:focus{box-shadow:inset 0 0 0 2px rgba(255,255,255,.65)}
 .slc-input .sl-btn{min-height:38px}
-.slc-login .sl-dialog{max-width:380px}
+.sl-dialog.slc-login{position:relative;max-width:380px}
+.slc-login .slc-x{position:absolute;top:14px;right:14px}
 .slc-login-tabs{display:flex;gap:8px;margin-bottom:14px}
 .slc-login-err{margin:8px 0 0;color:#f3727f;font-size:.8125rem;min-height:18px}
 .slc-qrbox{width:200px;height:200px;margin:4px auto;padding:10px;border-radius:8px;background:#fff}
@@ -274,9 +280,8 @@
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const setText = (el, text) => { if (el && el.textContent !== text) el.textContent = text; };
   const ICONS = {
-    comment: `<path d="M2 2.25h12v8.75H7.6L4.2 13.9v-2.9H2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>`,
     heart: '<path d="M8 13.9S2.4 10.6 2.4 6.6A3.1 3.1 0 0 1 8 5a3.1 3.1 0 0 1 5.6 1.6c0 4-5.6 7.3-5.6 7.3z"/>',
-    back: '<path d="M10.5 3.5 5.5 8l5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+    close: '<path d="M2.47 2.47a.75.75 0 0 1 1.06 0L8 6.94l4.47-4.47a.75.75 0 1 1 1.06 1.06L9.06 8l4.47 4.47a.75.75 0 1 1-1.06 1.06L8 9.06l-4.47 4.47a.75.75 0 0 1-1.06-1.06L6.94 8 2.47 3.53a.75.75 0 0 1 0-1.06"/>',
     send: '<path d="M2.2 8.6 13.5 2.2 9.4 13.8 7.6 9.6z"/><path d="M7.6 9.6 13.5 2.2" fill="none" stroke="#0f0f0f" stroke-width="1.2"/>',
     refresh: '<path d="M8 1.5a6.5 6.5 0 0 0-6.06 4.15l1.4.54A5 5 0 0 1 12.28 5.5H10.5V7H15V2.5h-1.5v1.83A6.48 6.48 0 0 0 8 1.5m4.66 8.31A5 5 0 0 1 3.72 10.5H5.5V9H1v4.5h1.5v-1.83a6.5 6.5 0 0 0 11.56-1.32z"/>',
     netease: '<path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zm3.12 3.62c.42.6.65 1.42.5 2.24-.16.86-.7 1.55-1.5 1.9-.88.4-1.83.4-2.6.1-1.14-.46-2.33-1.8-1.8-3.12.3-.76 1.12-1.34 1.94-1.3.83.05 1.43.6 1.9 1.1l.15.18c.34.42.68.76 1.12.94.74.3 1.4-.16 1.6-.86.24-.87-.5-1.66-1.2-2.06-.92-.53-2.1-.5-3-.06a3.9 3.9 0 0 0-1.98 2.5c-.16.7-.1 1.44.15 2.1.6 1.6 2.08 2.5 3.7 2.5.94 0 1.9-.35 2.6-1 .5-.46.84-1.05 1.04-1.7.2-.64.22-1.3.1-1.94-.26-1.3-1.05-2.42-2.2-3-.92-.46-2-.6-3-.38-.8.17-1.54.55-2.14 1.1-.42.4-.78.88-1.02 1.42-.38.86-.5 1.83-.34 2.73.1.56.33 1.1.62 1.57a5.9 5.9 0 0 0 2.44 2.2c.7.34 1.5.5 2.28.5.4 0 .8-.03 1.18-.1-.12-.4-.34-.76-.66-1.04z"/>',
@@ -435,30 +440,20 @@
   /* -------------------------------------------------------------- UI ---- */
   class CommentsUI {
     constructor() {
-      this.open = false; this.song = null; this.gen = 0; this.pollTimer = 0;
-      this.buildButton();
+      this.active = false; this.song = null; this.gen = 0; this.pollTimer = 0;
       this.buildPage();
       this.loginDialog = null; this.loginTab = 'qr'; this.qr = { key: '', stopped: true };
-      /* Track changes while the comments are open reload the area. */
+      /* Track changes while the comments tab is active reload the area. */
       this.key = '';
-      this.pollTimer = setInterval(() => { if (this.open) this.checkTrack(); }, 1500);
+      this.pollTimer = setInterval(() => { if (this.active) this.checkTrack(); }, 1500);
       if (this.pollTimer.unref) this.pollTimer.unref();
-    }
-    buildButton() {
-      this.btn = h('button', {
-        type: 'button', class: 'sl-round slc-entry', 'aria-label': '网易云音乐评论区', 'aria-pressed': 'false',
-        title: '网易云音乐评论区', onclick: () => this.toggle(),
-      }, svg(ICONS.comment));
-      const right = app.view && app.view.controls && app.view.controls.querySelector('.sl-controls-right');
-      if (right) right.append(this.btn);
     }
     buildPage() {
       this.titleEl = h('span', { class: 'slc-title' }, '评论');
       this.countEl = h('span', { class: 'slc-count' });
       this.userBox = h('span', { class: 'slc-head-user' });
-      this.refreshBtn = h('button', { type: 'button', class: 'slc-back', title: '刷新评论', 'aria-label': '刷新评论', onclick: () => this.refresh() }, svg(ICONS.refresh));
+      this.refreshBtn = h('button', { type: 'button', class: 'sl-icon-btn', title: '刷新评论', 'aria-label': '刷新评论', onclick: () => this.refresh() }, svg(ICONS.refresh));
       this.head = h('div', { class: 'slc-head' },
-        h('button', { type: 'button', class: 'slc-back', title: '返回歌词', 'aria-label': '返回', onclick: () => this.close() }, svg(ICONS.back)),
         this.titleEl, this.countEl, h('span', { class: 'slc-spacer' }), this.userBox, this.refreshBtn);
       this.songEl = h('div', { class: 'slc-songwrap' });
       this.hotEl = h('div', { class: 'slc-list' });
@@ -474,21 +469,25 @@
       this.inputBar = h('div', { class: 'slc-input' }, this.input, this.sendBtn);
       /* The disabled composer swallows clicks: treat any press on it as "log me in". */
       this.inputBar.addEventListener('mousedown', e => { if (!account) { e.preventDefault(); this.showLogin(); } });
-      this.el = h('div', { class: 'slc', role: 'dialog', 'aria-label': '网易云音乐评论区', 'data-testid': 'spot-lyric-comments' },
+      this.el = h('div', { class: 'slc', role: 'region', 'aria-label': '网易云音乐评论区', 'data-testid': 'spot-lyric-comments' },
         this.head, this.scroll, this.inputBar);
       this.sentinelObs = new IntersectionObserver(entries => {
         for (const e of entries) if (e.isIntersecting) this.loadMore();
       }, { root: this.scroll, rootMargin: '200px' });
       document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && this.open && !this.loginDialog) { e.stopPropagation(); this.close(); }
+        if (e.key === 'Escape' && this.active && !this.loginDialog) {
+          e.stopPropagation();
+          /* Esc closes the host panel (which deactivates us), like match/settings. */
+          if (app.view && app.view.closePanel) app.view.closePanel(); else this.deactivate();
+        }
       }, true);
     }
-    toggle() { this.open ? this.close() : this.show(); }
-    show() {
-      if (this.open) return;
-      this.open = true;
-      this.btn.setAttribute('aria-pressed', 'true');
-      app.view.page.append(this.el);
+    /* The host panel owns this.el and drives visibility: activate() runs when
+     * the comments tab is selected, deactivate() when switching away. The same
+     * element is re-used — nothing is appended or removed here. */
+    activate() {
+      if (this.active) return;
+      this.active = true;
       this.renderUser();
       /* MUSIC_U can expire silently between sessions: once per app start the
        * stored account is confirmed so a dead cookie does not linger. */
@@ -498,12 +497,10 @@
       }
       this.checkTrack(true);
     }
-    close() {
-      if (!this.open) return;
-      this.open = false;
-      this.btn.setAttribute('aria-pressed', 'false');
+    deactivate() {
+      if (!this.active) return;
+      this.active = false;
       this.closeLogin();
-      this.el.remove();
     }
     /* Current playing song -> NetEase comment resource, following engine.match
      * first and the search fallback otherwise. */
@@ -740,11 +737,15 @@
         email: h('button', { type: 'button', class: 'sl-chip', onclick: () => this.loginTabShow('email') }, '邮箱登录'),
       };
       const dialog = h('div', { class: 'sl-dialog slc-login', role: 'dialog', 'aria-modal': 'true' },
+        h('button', { type: 'button', class: 'sl-icon-btn slc-x', 'aria-label': '关闭登录窗口', title: '关闭', onclick: () => this.closeLogin() }, svg(ICONS.close)),
         h('h2', { class: 'sl-dialog-title' }, '登录网易云音乐'),
         h('div', { class: 'slc-login-tabs' }, this.loginTabs.qr, this.loginTabs.phone, this.loginTabs.email),
         this.loginBody, this.loginErr,
         h('p', { class: 'slc-login-note' }, '登录状态仅保存在本机，用于点赞和发布评论；二维码由网易云音乐生成，请在网易云音乐 App 中扫码确认。'));
-      const backdrop = h('div', { class: 'sl-dialog-backdrop' }, dialog);
+      const backdrop = h('div', {
+        class: 'sl-dialog-backdrop',
+        onmousedown: e => { if (e.target === backdrop) this.closeLogin(); },
+      }, dialog);
       const onKey = e => {
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.closeLogin(); }
       };
@@ -863,7 +864,12 @@
       if (!/^1\d{10}$/.test((phone || '').trim())) { this.loginError('请输入 11 位手机号'); return; }
       this.loginError('');
       try {
-        const { data } = await weapi('/weapi/captcha/sent', { cellphone: phone.trim(), ctcode: '86' });
+        /* Plaintext endpoint: the weapi captcha variants reject anonymous
+         * params, while /api/sms/captcha/sent answers {code:200,data:true}. */
+        const { data } = await api('POST', `${NETEASE}/api/sms/captcha/sent`, {
+          body: `cellphone=${encodeURIComponent(phone.trim())}&ctcode=86`,
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        });
         if (data && (data.code === 200 || data.code === 0)) toast('验证码已发送');
         else this.loginError('发送失败：' + (data && (data.message || data.msg) || '请稍后重试'));
       } catch (e) { this.loginError('发送失败：' + (e.message || e)); }
@@ -915,7 +921,10 @@
       style.textContent = CSS;
       document.head.append(style);
       await loadAccount();
-      new CommentsUI();
+      const ui = new CommentsUI();
+      /* Host contract: the side panel mounts ui.el once and calls
+       * ui.activate() / ui.deactivate() as its comments tab is toggled. */
+      window.SpotLyricComments.view = ui;
       console.log('%c[spot-lyric]', 'color:#1ed760;font-weight:bold', 'comments plugin mounted');
     },
   };
