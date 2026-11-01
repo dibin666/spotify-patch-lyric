@@ -30,7 +30,7 @@ var allowedPaths = map[string]bool{
 	"/cgi-bin/musicu.fcg": true, "/cgi-bin/musics.fcg": true, "/v8/fcg-bin/fcg_play_single_song.fcg": true, "/lyric/fcgi-bin/fcg_query_lyric_new.fcg": true,
 	"/weapi/login": true, "/weapi/login/cellphone": true, "/weapi/login/token/refresh": true,
 	"/weapi/login/qrcode/unikey": true, "/weapi/login/qrcode/client/login": true, "/weapi/logout": true,
-	"/weapi/captcha/sent": true, "/weapi/captcha/verify": true, "/weapi/w/nuser/account/get": true,
+	"/weapi/captcha/sent": true, "/weapi/captcha/verify": true, "/weapi/sms/captcha/verify": true, "/weapi/w/nuser/account/get": true,
 	"/weapi/v1/comment/like": true, "/weapi/v1/resource/comments/add": true, "/weapi/v1/resource/comments/delete": true,
 }
 

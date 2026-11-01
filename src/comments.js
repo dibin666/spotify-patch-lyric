@@ -280,6 +280,7 @@
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const setText = (el, text) => { if (el && el.textContent !== text) el.textContent = text; };
   const ICONS = {
+    comment: `<path d="M2 2.25h12v8.75H7.6L4.2 13.9v-2.9H2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>`,
     heart: '<path d="M8 13.9S2.4 10.6 2.4 6.6A3.1 3.1 0 0 1 8 5a3.1 3.1 0 0 1 5.6 1.6c0 4-5.6 7.3-5.6 7.3z"/>',
     close: '<path d="M2.47 2.47a.75.75 0 0 1 1.06 0L8 6.94l4.47-4.47a.75.75 0 1 1 1.06 1.06L9.06 8l4.47 4.47a.75.75 0 1 1-1.06 1.06L8 9.06l-4.47 4.47a.75.75 0 0 1-1.06-1.06L6.94 8 2.47 3.53a.75.75 0 0 1 0-1.06"/>',
     send: '<path d="M2.2 8.6 13.5 2.2 9.4 13.8 7.6 9.6z"/><path d="M7.6 9.6 13.5 2.2" fill="none" stroke="#0f0f0f" stroke-width="1.2"/>',
@@ -442,7 +443,9 @@
     constructor() {
       this.active = false; this.song = null; this.gen = 0; this.pollTimer = 0;
       this.buildPage();
+      this.buildEntry();
       this.loginDialog = null; this.loginTab = 'qr'; this.qr = { key: '', stopped: true };
+      this.entryBtn = null;
       /* Track changes while the comments tab is active reload the area. */
       this.key = '';
       this.pollTimer = setInterval(() => { if (this.active) this.checkTrack(); }, 1500);
@@ -501,6 +504,17 @@
       if (!this.active) return;
       this.active = false;
       this.closeLogin();
+    }
+    /* Round button in the lyrics controls bar: one click opens the host panel
+     * straight on the comments tab. */
+    buildEntry() {
+      this.entryBtn = h('button', {
+        type: 'button', class: 'sl-round slc-entry', 'aria-label': '网易云音乐评论区',
+        title: '网易云音乐评论区',
+        onclick: () => { if (app.view && app.view.openPanel) app.view.openPanel('comments'); },
+      }, svg(ICONS.comment));
+      const right = app.view && app.view.controls && app.view.controls.querySelector('.sl-controls-right');
+      if (right) right.append(this.entryBtn);
     }
     /* Current playing song -> NetEase comment resource, following engine.match
      * first and the search fallback otherwise. */
@@ -880,12 +894,27 @@
       if (!secret) { this.loginError(this._phoneMode === 'password' ? '请输入密码' : '请输入验证码'); return; }
       btn.disabled = true; this.loginError('');
       try {
+        /* Official web flow: verify the captcha first — besides validating the
+         * code it marks this device as captcha-verified, which is what lets the
+         * following login past the "请确认是否本人账号" device check. */
+        if (this._phoneMode === 'captcha') {
+          const { data: v } = await weapi('/weapi/sms/captcha/verify', { ctcode: '86', cellphone: phone, captcha: secret });
+          if (v && v.code !== 200 && v.data !== true) {
+            this.loginError('验证失败：' + (v.message || v.msg || '验证码错误或已过期'));
+            return;
+          }
+        }
         const params = { phone, countrycode: '86', rememberLogin: 'true' };
         if (this._phoneMode === 'captcha') params.captcha = secret; else params.password = md5(secret);
         const { data } = await weapi('/weapi/login/cellphone', params);
         if (data && data.code === 200 && data.cookie) captureBodyCookie(data.cookie);
         if (data && data.code === 200) { this.finishLogin(); return; }
-        this.loginError('登录失败：' + (data && (data.message || data.msg) || `code ${data && data.code}`));
+        const msg = (data && (data.message || data.msg)) || `code ${data && data.code}`;
+        /* The device-trust wall survives correct credentials on protected
+         * accounts: point at the QR path, which the logged-in app authorizes. */
+        const hint = /本人账号|设备|验证/.test(msg) || (data && data.code === 509)
+          ? '（该账号触发了新设备验证，建议改用「扫码登录」，由已登录的网易云 App 授权）' : '';
+        this.loginError('登录失败：' + msg + hint);
       } catch (e) { this.loginError('登录失败：' + (e.message || e)); }
       finally { btn.disabled = false; }
     }
