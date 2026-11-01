@@ -330,6 +330,8 @@
   }
   function clearAccount() {
     account = null; jar.clear();
+    /* liked flags in cached comments belong to the previous account. */
+    comments.clear();
     app.store.kvSet(ACCOUNT_KEY, null);
   }
 
@@ -777,6 +779,9 @@
           return;
         }
       }
+      /* Signing in as a different user: cached comments carry the previous
+       * account's liked flags — drop them all and refetch. */
+      comments.clear();
       saveAccount(profile || { userId: 0, nickname: '网易云用户', avatar: '' });
       this.closeLogin();
       this.renderUser();
