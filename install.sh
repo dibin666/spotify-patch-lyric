@@ -55,6 +55,8 @@ Spot-Lyric for Spotify$(installed_version >/dev/null 2>&1 && printf ' v%s' "$(in
 
 安装向导的选项（如 --mode local -y）同 patch.sh，见 spot-lyric help-patch。
 没有 spot-lyric 命令时可以直接运行：curl -fsSL $SITE | bash
+
+环境变量：SPOT_LYRIC_FORCE=1 时即使版本相同也重新下载完整文件（本地文件损坏时有用）。
 USAGE
 }
 
@@ -81,6 +83,17 @@ latest_tag() {
 }
 installed_version() { [[ -f $APP/VERSION && -f $APP/patch.sh ]] && tr -d ' \r\n' < "$APP/VERSION"; }
 
+# Everything an update relies on: a copy missing any of these is re-downloaded
+# even when its VERSION already matches, so the update always runs a complete,
+# consistent release (e.g. files added by a newer version can never be absent).
+APP_FILES="patch.sh install.sh VERSION src/core.js src/app.js src/app.css src/comments.js"
+app_complete() {
+  [[ -n $(installed_version || true) ]] || return 1
+  local f
+  for f in $APP_FILES; do [[ -f $APP/$f ]] || return 1; done
+  return 0
+}
+
 # Release source archive -> $APP (the previous copy is replaced only after a complete download).
 fetch_release() {  # fetch_release TAG
   local tag="$1" tmp url ok=0
@@ -96,6 +109,7 @@ fetch_release() {  # fetch_release TAG
   [[ -d $APP ]] && mv "$APP" "$APP.old"
   mv "$tmp/src" "$APP"
   rm -rf "$APP.old" "$tmp"
+  app_complete || warn "下载的 ${tag} 不完整（缺少插件文件）；如果更新异常请删除 $APP 后重试"
 }
 
 # Latest release in $APP. Offline with a copy installed: keep using it.
@@ -106,8 +120,10 @@ ensure_latest() {
     [[ -n $have ]] || die "无法获取最新版本（${SITE}、github.com 都连不上），请检查网络后重试"
     warn "无法检查新版本，继续使用已安装的 v$have"; return 0
   fi
-  if [[ $have == "${tag#v}" ]]; then say "已是最新版本 $tag"; return 0; fi
-  if [[ -n $have ]]; then say "发现新版本：v$have → ${tag}，正在下载…"; else say "下载 Spot-Lyric ${tag}…"; fi
+  if [[ $have == "${tag#v}" && ${SPOT_LYRIC_FORCE:-} != 1 ]] && app_complete; then say "已是最新版本 $tag"; return 0; fi
+  if [[ -n $have && $have != "${tag#v}" ]]; then say "发现新版本：v$have → ${tag}，正在下载…"
+  elif [[ -n $have ]]; then say "本地文件不完整，重新下载 ${tag}…"
+  else say "下载 Spot-Lyric ${tag}…"; fi
   fetch_release "$tag"
 }
 ensure_app() { [[ -n $(installed_version || true) ]] || ensure_latest; }

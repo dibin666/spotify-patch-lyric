@@ -16,6 +16,7 @@ func TestRelayAllowed(t *testing.T) {
 		want        bool
 	}{
 		{"POST", "https://u.y.qq.com/cgi-bin/musicu.fcg", true},
+		{"POST", "https://u.y.qq.com/cgi-bin/musics.fcg?sign=zzcabc", true},
 		{"GET", "https://music.163.com/api/song/lyric?id=1", true},
 		{"GET", "https://music.163.com:8443/api/song/lyric", false},
 		{"GET", "http://music.163.com/api/song/lyric", false},
@@ -23,6 +24,17 @@ func TestRelayAllowed(t *testing.T) {
 		{"GET", "https://music.163.com/weapi/user/account", false},
 		{"DELETE", "https://music.163.com/api/song/lyric?id=1", false},
 		{"GET", "https://user@music.163.com/api/song/lyric", false},
+		/* comments plugin endpoints */
+		{"GET", "https://music.163.com/api/v1/resource/comments/R_SO_4_347230?limit=20&offset=0", true},
+		{"POST", "https://music.163.com/api/login/qrcode/unikey", true},
+		{"POST", "https://music.163.com/api/login/qrcode/client/login", true},
+		{"POST", "https://music.163.com/api/v1/comment/like", true},
+		{"POST", "https://music.163.com/weapi/login/cellphone", true},
+		{"POST", "https://music.163.com/weapi/captcha/sent", true},
+		{"POST", "https://music.163.com/weapi/v1/resource/comments/add", true},
+		{"POST", "https://music.163.com/weapi/w/nuser/account/get", true},
+		{"GET", "https://u.y.qq.com/api/v1/resource/comments/x", false},
+		{"GET", "https://music.163.com/api/v2/other", false},
 	}
 	for _, c := range cases {
 		if got := relayAllowed(c.method, c.url); got != c.want {

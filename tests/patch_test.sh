@@ -45,7 +45,7 @@ run_unix_suite() {  # name platform spotify_path apps_dir original_spa
   check "apply injects" '[[ $out == *已注入* && $out != *"patch.sh used"* ]]'
   m1="$(marker "$apps/xpui.spa")"
   check "marker present ($m1)" '[[ -n $m1 ]]'
-  check "assets in archive" 'unzip -l "$apps/xpui.spa" | grep -q spot-lyric/spot-lyric.js && unzip -l "$apps/xpui.spa" | grep -q spot-lyric/spot-lyric.css'
+  check "assets in archive" 'unzip -l "$apps/xpui.spa" | grep -q spot-lyric/spot-lyric.js && unzip -l "$apps/xpui.spa" | grep -q spot-lyric/spot-lyric.css && unzip -l "$apps/xpui.spa" | grep -q spot-lyric/spot-lyric-comments.js'
   check "single injection block" '[[ $(unzip -p "$apps/xpui.spa" index.html | grep -o "spot-lyric:start" | wc -l) -eq 1 ]]'
   check "script tag before </body>" 'unzip -p "$apps/xpui.spa" index.html | grep -q "src=\"/spot-lyric/spot-lyric.js\"></script><!-- spot-lyric:end --></body>"'
   check "archive integrity" 'unzip -tqq "$apps/xpui.spa"'
@@ -55,6 +55,16 @@ run_unix_suite() {  # name platform spotify_path apps_dir original_spa
   check "cloud mode baked in" '[[ $(baked "$apps/xpui.spa" cloud) -eq 1 && $(baked_request "$apps/xpui.spa" server) -eq 1 ]]'
   run "${sh[@]}" apply --yes --mode cloud --no-restart --spotify-path "$path"
   check "second apply is a no-op" '[[ $out == *无需修改* ]]'
+  # Assets drifted but the marker still matches: update must rewrite them (REPAIRED),
+  # never report "已是最新" over a missing or changed file.
+  zip -qd "$apps/xpui.spa" spot-lyric/spot-lyric-comments.js
+  run "${sh[@]}" apply --yes --mode cloud --no-restart --spotify-path "$path"
+  check "missing asset is repaired" '[[ $out == *重新写入* && $out != *已注入* ]] && unzip -l "$apps/xpui.spa" | grep -q spot-lyric/spot-lyric-comments.js'
+  ( cd "$WORK" && mkdir -p stalefix/spot-lyric && echo stale > stalefix/spot-lyric/stale.js && cd stalefix && zip -q "$apps/xpui.spa" spot-lyric/stale.js && echo corrupt > spot-lyric/spot-lyric.css && zip -q "$apps/xpui.spa" spot-lyric/spot-lyric.css )
+  run "${sh[@]}" apply --yes --mode cloud --no-restart --spotify-path "$path"
+  check "extra + corrupted assets are repaired" '[[ $out == *重新写入* ]] && [[ $(unzip -Z1 "$apps/xpui.spa" | grep -c "^spot-lyric/") -eq 3 ]] && [[ $(unzip -p "$apps/xpui.spa" spot-lyric/spot-lyric.css | cksum) == $(cksum < "$ROOT/src/app.css") ]]'
+  run "${sh[@]}" apply --yes --mode cloud --no-restart --spotify-path "$path"
+  check "apply after repair is a no-op" '[[ $out == *无需修改* ]]'
   run "${sh[@]}" apply --yes --mode local --no-restart --spotify-path "$path"
   m3="$(marker "$apps/xpui.spa")"
   check "pure local build differs" '[[ $out == *已注入* && $m3 != "$m1" && $(baked "$apps/xpui.spa" local) -eq 1 ]]'

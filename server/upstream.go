@@ -22,10 +22,23 @@ var allowedHosts = map[string]bool{
 	"u.y.qq.com": true, "c.y.qq.com": true, "i.y.qq.com": true,
 }
 
-/* The endpoints src/core.js uses (search, song detail, lyrics). */
+/* The endpoints src/core.js uses (search, song detail, lyrics) plus the exact
+ * weapi paths of the optional comments plugin (src/comments.js): encrypted
+ * sign-in, captcha, comment write and the account status check. */
 var allowedPaths = map[string]bool{
 	"/api/search/get/web": true, "/api/song/detail/": true, "/api/song/detail": true, "/api/song/lyric": true, "/api/song/lyric/v1": true,
-	"/cgi-bin/musicu.fcg": true, "/v8/fcg-bin/fcg_play_single_song.fcg": true, "/lyric/fcgi-bin/fcg_query_lyric_new.fcg": true,
+	"/cgi-bin/musicu.fcg": true, "/cgi-bin/musics.fcg": true, "/v8/fcg-bin/fcg_play_single_song.fcg": true, "/lyric/fcgi-bin/fcg_query_lyric_new.fcg": true,
+	"/weapi/login": true, "/weapi/login/cellphone": true, "/weapi/login/token/refresh": true,
+	"/weapi/login/qrcode/unikey": true, "/weapi/login/qrcode/client/login": true, "/weapi/logout": true,
+	"/weapi/captcha/sent": true, "/weapi/captcha/verify": true, "/weapi/w/nuser/account/get": true,
+	"/weapi/v1/comment/like": true, "/weapi/v1/resource/comments/add": true, "/weapi/v1/resource/comments/delete": true,
+}
+
+/* Prefixes only allowed on music.163.com: comment reading (dynamic song id in
+ * the path) and the unencrypted variants of the plugin's calls. */
+var neteasePathPrefixes = []string{
+	"/api/v1/resource/comments/", "/api/v1/comment/",
+	"/api/login", "/api/w/", "/api/captcha", "/api/logout",
 }
 
 func relayAllowed(method, href string) bool {
@@ -36,8 +49,20 @@ func relayAllowed(method, href string) bool {
 	if err != nil {
 		return false
 	}
-	return u.Scheme == "https" && (u.Port() == "" || u.Port() == "443") && u.User == nil &&
-		allowedHosts[u.Hostname()] && allowedPaths[u.Path]
+	if u.Scheme != "https" || (u.Port() != "" && u.Port() != "443") || u.User != nil || !allowedHosts[u.Hostname()] {
+		return false
+	}
+	if allowedPaths[u.Path] {
+		return true
+	}
+	if u.Hostname() == "music.163.com" {
+		for _, prefix := range neteasePathPrefixes {
+			if strings.HasPrefix(u.Path, prefix) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 const (
@@ -56,6 +81,10 @@ type UpstreamResponse struct {
 	Status     int
 	Body       string
 	RetryAfter string
+	/* Set-Cookie headers of the upstream response: the comments plugin's sign-in
+	 * returns the session cookie only there (a browser would store it; relayed
+	 * requests have no jar, so the client keeps the token itself). */
+	SetCookie []string
 }
 
 type Transport func(ctx context.Context, req UpstreamRequest) (*UpstreamResponse, error)
@@ -114,7 +143,7 @@ func newTransport(neteaseRealIP string, qqGap, neteaseGap time.Duration) Transpo
 		headers.Set("Accept", "application/json")
 		for name, value := range r.Headers {
 			switch strings.ToLower(name) {
-			case "referer", "content-type", "accept":
+			case "referer", "content-type", "accept", "cookie":
 				headers.Set(name, value)
 			}
 		}
@@ -157,7 +186,14 @@ func newTransport(neteaseRealIP string, qqGap, neteaseGap time.Duration) Transpo
 		if len(data) > maxResponse {
 			return nil, errors.New("响应超过 2 MiB 限制")
 		}
-		return &UpstreamResponse{resp.StatusCode, string(data), resp.Header.Get("Retry-After")}, nil
+		var cookies []string
+		for _, c := range resp.Header.Values("Set-Cookie") {
+			cookies = append(cookies, truncate(c, 2048))
+			if len(cookies) >= 8 {
+				break
+			}
+		}
+		return &UpstreamResponse{resp.StatusCode, string(data), resp.Header.Get("Retry-After"), cookies}, nil
 	}
 
 	/* QQ answers HTTP 200 + code 2001 (empty results) while it throttles this

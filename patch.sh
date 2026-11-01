@@ -313,6 +313,7 @@ build_bundle() {  # build_bundle OUT_DIR MODE SERVER REQUEST
         -e "s|__SPOT_LYRIC_SITE__|$SITE|g" "$ROOT/src/app.js"
   } > "$out/spot-lyric.js"
   cp "$ROOT/src/app.css" "$out/spot-lyric.css"
+  sed -e "s/__SPOT_LYRIC_VERSION__/$VERSION/g" "$ROOT/src/comments.js" > "$out/spot-lyric-comments.js"
 }
 
 # ----------------------------------------------------- patcher (pure sh) ---
@@ -324,6 +325,44 @@ build_bundle() {  # build_bundle OUT_DIR MODE SERVER REQUEST
 # backup back. Same layout, marker and digest as patch.ps1.
 ZP_BLOCK_RE='<!-- spot-lyric:start[^>]*-->.*<!-- spot-lyric:end -->'
 zp_marker() { sed -n 's/.*<!-- spot-lyric:start v\([^ ]*\) sha=\([0-9a-f]*\) -->.*/\1 \2/p' | head -n1; }
+# The marker only proves an injection once finished; before deciding there is
+# nothing to do, every asset on disk must still match the bundle byte for byte —
+# a missing, different or extra file is rewritten (REPAIRED) instead of trusted.
+zp_dir_ok() {  # zp_dir_ok XPUI_DIR FILE...  -> DIR/spot-lyric/<basename> matches each FILE
+  local dir="$1/spot-lyric" f name want=" "
+  shift
+  for f in "$@"; do
+    name="${f##*/}"
+    want="$want$name "
+    [[ -f $dir/$name && $(sha256 < "$dir/$name") == "$(sha256 < "$f")" ]] || return 1
+  done
+  for f in "$dir"/*; do
+    [[ -e $f ]] || continue
+    case "$want" in *" ${f##*/} "*) ;; *) return 1 ;; esac
+  done
+  return 0
+}
+zp_spa_ok() {  # zp_spa_ok ARCHIVE FILE...  -> spot-lyric/<basename> entries match each FILE
+  local spa="$1" f name want=" " seen=" " e count cdsize cdoff
+  local start len method c0 c1 c2 c3 csize usize lho
+  shift
+  for f in "$@"; do want="$want spot-lyric/${f##*/}"; done
+  want="$want "
+  e="$(zip_eocd "$spa")" || return 1
+  read -r count cdsize cdoff <<< "$e"
+  while read -r start len method c0 c1 c2 c3 csize usize lho name; do
+    case "$name" in spot-lyric/*)
+      case "$want" in *" $name "*) ;; *) return 1 ;; esac
+      seen="$seen$name " ;;
+    esac
+  done < <(zip_central "$spa" "$cdoff" "$cdsize")
+  for f in "$@"; do
+    name="spot-lyric/${f##*/}"
+    case "$seen" in *" $name "*) ;; *) return 1 ;; esac
+    [[ $(zip_read "$spa" "$name" | sha256) == "$(sha256 < "$f")" ]] || return 1
+  done
+  return 0
+}
 zp_inject() {  # stdin html, $1 digest
   local block="<!-- spot-lyric:start v$VERSION sha=$1 --><link rel=\"stylesheet\" href=\"/spot-lyric/spot-lyric.css\"><script defer=\"defer\" src=\"/spot-lyric/spot-lyric.js\"></script><!-- spot-lyric:end -->"
   local html; html="$(sed -E "s#$ZP_BLOCK_RE##")"
@@ -408,7 +447,7 @@ zip_rewrite() {
   [[ $run_start -ge 0 ]] && zbytes "$src" $((cdoff + run_start)) $((run_end - run_start)) >> "$cd"
   set -- $(date '+%Y %m %d %H %M %S')
   tm=$(( (10#$4 << 11) | (10#$5 << 5) | (10#$6 / 2) )); dt=$(( ((10#$1 - 1980) << 9) | (10#$2 << 5) | 10#$3 ))
-  set -- "index.html=$ZR_HTML" ${ZR_JS:+"spot-lyric/spot-lyric.js=$ZR_JS"} ${ZR_CSS:+"spot-lyric/spot-lyric.css=$ZR_CSS"}
+  set -- "index.html=$ZR_HTML" ${ZR_JS:+"spot-lyric/spot-lyric.js=$ZR_JS"} ${ZR_CSS:+"spot-lyric/spot-lyric.css=$ZR_CSS"} ${ZR_COMMENTS:+"spot-lyric/spot-lyric-comments.js=$ZR_COMMENTS"}
   for entry in "$@"; do
     name="${entry%%=*}"; file="${entry#*=}"
     gz="$tmp.gz"; gzip -n -c < "$file" > "$gz"; gsize="$(fsize "$gz")"; csize=$((gsize - 18))
@@ -432,29 +471,33 @@ xpui() {  # xpui <patch|restore|status> APPS [js css]
   folder="$apps/xpui"; spa="$apps/xpui.spa"; backup="$spa.spot-lyric.bak"
   case "$cmd" in
     patch)
-      local js="$3" css="$4"
-      digest="$( { cat "$js"; printf '\0'; cat "$css"; } | sha256 | cut -c1-16)"
+      local js="$3" css="$4" comments="$5"
+      digest="$( { cat "$js"; printf '\0'; cat "$css"; printf '\0'; cat "$comments"; } | sha256 | cut -c1-16)"
       if [[ -f "$folder/index.html" ]]; then
         current="$(zp_marker < "$folder/index.html")"
-        [[ $current == "$VERSION $digest" ]] && { echo "UNCHANGED dir"; return 0; }
-        mkdir -p "$folder/spot-lyric"
-        cp "$js" "$css" "$folder/spot-lyric/"
+        [[ $current == "$VERSION $digest" ]] && zp_dir_ok "$folder" "$js" "$css" "$comments" && { echo "UNCHANGED dir"; return 0; }
+        rm -rf "$folder/spot-lyric"; mkdir -p "$folder/spot-lyric"
+        cp "$js" "$css" "$comments" "$folder/spot-lyric/"
         html="$(zp_inject "$digest" < "$folder/index.html")"
         printf '%s' "$html" > "$folder/index.html"
-        echo "PATCHED dir $folder"; return 0
+        [[ $current == "$VERSION $digest" ]] && echo "REPAIRED dir $folder" || echo "PATCHED dir $folder"
+        return 0
       fi
       [[ -f $spa ]] || { echo "xpui.spa not found in $apps"; return 1; }
       current="$(zip_read "$spa" index.html | zp_marker)"
-      [[ $current == "$VERSION $digest" ]] && { echo "UNCHANGED spa"; return 0; }
+      [[ $current == "$VERSION $digest" ]] && zp_spa_ok "$spa" "$js" "$css" "$comments" && { echo "UNCHANGED spa"; return 0; }
       if [[ -z $current ]]; then cp -p "$spa" "$backup"      # fresh / freshly updated archive = new original
-      else [[ -f $backup ]] || { echo "xpui.spa is patched but the backup is missing; reinstall Spotify"; return 1; }
+      elif [[ ! -f $backup && $current != "$VERSION $digest" ]]; then echo "xpui.spa is patched but the backup is missing; reinstall Spotify"; return 1
       fi
       stage="$(mktemp -d)"
-      zip_read "$backup" index.html > "$stage/original.html" || { rm -rf "$stage"; echo "xpui.spa: 读不到 index.html"; return 1; }
+      # Repairing drifted assets without a backup: the archive itself is the base —
+      # its index.html is already injected and zp_inject normalises the block.
+      local base="$backup"; [[ -f $backup ]] || base="$spa"
+      zip_read "$base" index.html > "$stage/original.html" || { rm -rf "$stage"; echo "xpui.spa: 读不到 index.html"; return 1; }
       zp_inject "$digest" < "$stage/original.html" > "$stage/index.html"
-      ZR_HTML="$stage/index.html" ZR_JS="$js" ZR_CSS="$css" zip_rewrite "$backup" "$spa" || { rm -rf "$stage"; return 1; }
+      ZR_HTML="$stage/index.html" ZR_JS="$js" ZR_CSS="$css" ZR_COMMENTS="$comments" zip_rewrite "$base" "$spa" || { rm -rf "$stage"; return 1; }
       rm -rf "$stage"
-      echo "PATCHED spa $spa" ;;
+      [[ $current == "$VERSION $digest" ]] && echo "REPAIRED spa $spa" || echo "PATCHED spa $spa" ;;
     restore)
       local restored=""
       if [[ -f "$folder/index.html" ]]; then
@@ -531,7 +574,7 @@ do_apply() {  # do_apply MODE SERVER REQUEST
   [[ $SPOTIFY_DIR == /snap/* ]] && die "Snap 版 Spotify 是只读文件系统，无法注入。请改用 deb 或 flatpak 版本。"
   tmp="$(mktemp -d)"
   build_bundle "$tmp" "$1" "$2" "$3"
-  if ! result="$(run_patcher patch "$tmp/spot-lyric.js" "$tmp/spot-lyric.css" 2>&1)"; then
+  if ! result="$(run_patcher patch "$tmp/spot-lyric.js" "$tmp/spot-lyric.css" "$tmp/spot-lyric-comments.js" 2>&1)"; then
     rm -rf "$tmp"
     [[ $PLATFORM == macos && $result == *"ermitted"* ]] && macos_permission_hint
     die "注入失败：$result"
@@ -539,6 +582,7 @@ do_apply() {  # do_apply MODE SERVER REQUEST
   rm -rf "$tmp"
   case "$result" in
     *UNCHANGED*) say "插件已是最新（v${VERSION}，$(mode_name "$1")），无需修改"; PATCH_CHANGED=0 ;;
+    *REPAIRED*)  say "插件文件不完整或不一致，已重新写入（v${VERSION}）→ ${result##*REPAIRED * }"; PATCH_CHANGED=1; macos_resign ;;
     *PATCHED*)   say "已注入歌词插件 v${VERSION}（$(mode_name "$1")）→ ${result##*PATCHED * }"; PATCH_CHANGED=1; macos_resign ;;
     *) [[ $PLATFORM == macos && $result == *"ermitted"* ]] && macos_permission_hint; die "注入失败：$result" ;;
   esac

@@ -404,7 +404,11 @@ func (a *App) relay(ctx context.Context, body obj) (any, error) {
 	if resp.RetryAfter != "" {
 		retry = resp.RetryAfter
 	}
-	return obj{"status": resp.Status, "body": resp.Body, "retry_after": retry}, nil
+	var cookies any
+	if len(resp.SetCookie) > 0 {
+		cookies = resp.SetCookie
+	}
+	return obj{"status": resp.Status, "body": resp.Body, "retry_after": retry, "set_cookie": cookies}, nil
 }
 
 /* ------------------------------------------------------------ http ---- */

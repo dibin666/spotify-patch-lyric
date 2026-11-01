@@ -541,7 +541,11 @@
   }
   function providerCandidates(provider, response) {
     const result = [];
-    for (const path of ['result/songs', 'songs', 'req_1/data/body/song/list', 'data']) {
+    /* Signed QQ search answers under the module name; old format used req_1. */
+    const paths = provider === 'qq'
+      ? ['music.search.SearchCgiService/data/body/song/list', 'req_1/data/body/song/list', 'req/data/body/song/list', 'result/songs', 'songs', 'data']
+      : ['result/songs', 'songs', 'req_1/data/body/song/list', 'data'];
+    for (const path of paths) {
       const node = at(response, path);
       if (!Array.isArray(node)) continue;
       for (const song of node) {
@@ -556,23 +560,80 @@
   }
   const NETEASE = 'https://music.163.com';
   const QQ = 'https://u.y.qq.com/cgi-bin/musicu.fcg';
+  /* Compact SHA-1 (RFC 3174) for the QQ request signature below. */
+  function sha1(text) {
+    const bytes = new TextEncoder().encode(text), len = bytes.length;
+    const msg = new Uint8Array(((len + 8) >> 6 << 6) + 64);
+    msg.set(bytes); msg[len] = 0x80;
+    const view = new DataView(msg.buffer);
+    view.setUint32(msg.length - 4, len * 8);   // big-endian bit length (inputs < 512 MiB)
+    let h0 = 0x67452301, h1 = 0xefcdab89, h2 = 0x98badcfe, h3 = 0x10325476, h4 = 0xc3d2e1f0;
+    const W = new Int32Array(80), rol = (x, n) => (x << n) | (x >>> (32 - n));
+    for (let off = 0; off < msg.length; off += 64) {
+      for (let i = 0; i < 16; i++) W[i] = view.getInt32(off + i * 4);
+      for (let i = 16; i < 80; i++) W[i] = rol(W[i - 3] ^ W[i - 8] ^ W[i - 14] ^ W[i - 16], 1);
+      let a = h0, b = h1, c = h2, d = h3, e = h4;
+      for (let i = 0; i < 80; i++) {
+        let f, k;
+        if (i < 20) { f = (b & c) | (~b & d); k = 0x5a827999; }
+        else if (i < 40) { f = b ^ c ^ d; k = 0x6ed9eba1; }
+        else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8f1bbcdc; }
+        else { f = b ^ c ^ d; k = 0xca62c1d6; }
+        const t = (rol(a, 5) + f + e + k + W[i]) | 0;
+        e = d; d = c; c = rol(b, 30); b = a; a = t;
+      }
+      h0 = (h0 + a) | 0; h1 = (h1 + b) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0; h4 = (h4 + e) | 0;
+    }
+    return [h0, h1, h2, h3, h4].map(v => (v >>> 0).toString(16).padStart(8, '0')).join('').toUpperCase();
+  }
+  /* QQ Music anonymous-search risk control: unsigned searches return empty
+   * results (is_filter=-2). The web/desktop client posts the same JSON body to
+   * musics.fcg?sign=zzc… — the "zzc" signature scrambles the SHA-1 of the body
+   * (algorithm published by jixunmoe/qmweb-sign, MIT). UA / Referer / cookies
+   * do not matter; only the signature does. */
+  const ZZC_PART1 = [23, 14, 6, 36, 16, 40, 7, 19], ZZC_PART2 = [16, 1, 32, 12, 19, 27, 8, 5];
+  const ZZC_SCRAMBLE = [89, 39, 179, 150, 218, 82, 58, 252, 177, 52, 186, 123, 120, 64, 242, 133, 143, 161, 121, 179];
+  function zzcSign(text) {
+    const hash = sha1(text), pick = ix => ix.map(i => hash[i]).join('');
+    const part3 = ZZC_SCRAMBLE.map((v, i) => v ^ parseInt(hash.slice(i * 2, i * 2 + 2), 16));
+    const b64 = btoa(String.fromCharCode(...part3)).replace(/[\\/+=]/g, '');
+    return `zzc${pick(ZZC_PART1)}${b64}${pick(ZZC_PART2)}`.toLowerCase();
+  }
+  const qqSearchId = () => {
+    let s = '';
+    for (let i = 0; i < 32; i++) s += Math.floor(Math.random() * 16).toString(16);
+    return s.toUpperCase() + String(Math.floor(Math.random() * 100000)).padStart(5, '0');
+  };
+  const qqGuid = () => qqSearchId().slice(0, 32);
   /* Builds the HTTP request for a provider search, including direct song links. */
   function searchRequest(provider, query) {
     const normalized = normalize(query);
     if (provider === 'qq') {
-      const request = {
-        method: 'POST', url: QQ, headers: { Referer: 'https://c.y.qq.com/', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ req_1: { method: 'DoSearchForQQMusicDesktop', module: 'music.search.SearchCgiService', param: { num_per_page: 20, page_num: 1, search_type: 0, query: normalized } } }),
-      };
       if (query.includes('y.qq.com/')) {
         const m = /(?:songDetail|song)\/([A-Za-z0-9]{1,64})/.exec(query);
         if (m) {
-          request.url = 'https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg';
-          request.body = `songmid=${m[1]}&format=jsonp&callback=getOneSongInfoCallback&g_tk=5381&platform=yqq&outCharset=utf8`;
-          request.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+          return {
+            method: 'POST', url: 'https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg',
+            headers: { Referer: 'https://c.y.qq.com/', 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `songmid=${m[1]}&format=jsonp&callback=getOneSongInfoCallback&g_tk=5381&platform=yqq&outCharset=utf8`,
+          };
         }
       }
-      return request;
+      const body = JSON.stringify({
+        comm: {
+          _channelid: '0', _os_version: '6.2.9200-2', ct: '19', cv: '2151', guid: qqGuid(), patch: '118',
+          psrf_access_token_expiresAt: 0, psrf_qqaccess_token: '', psrf_qqopenid: '', psrf_qqunionid: '',
+          tmeAppID: 'qqmusic', tmeLoginType: 0, uin: '0', wid: String(Math.floor(Math.random() * 8e18) + 1e18),
+        },
+        'music.search.SearchCgiService': {
+          module: 'music.search.SearchCgiService', method: 'DoSearchForQQMusicDesktop',
+          param: { grp: 1, num_per_page: 20, page_num: 1, query: normalized, remoteplace: 'txt.newclient.top', search_type: 0, searchid: qqSearchId() },
+        },
+      });
+      return {
+        method: 'POST', url: `https://u.y.qq.com/cgi-bin/musics.fcg?sign=${zzcSign(body)}`,
+        headers: { Referer: 'https://c.y.qq.com/', 'Content-Type': 'application/json' }, body,
+      };
     }
     let url = `${NETEASE}/api/search/get/web?s=${encodeURIComponent(normalized)}&type=1&offset=0&total=false&limit=20`;
     if (query.includes('music.163.com/')) {
@@ -632,7 +693,7 @@
       if (start >= 0 && end > start) { try { raw = JSON.parse(body.slice(start + 1, end)); } catch (_) { /* fallthrough */ } }
     }
     if (raw === undefined) throw new ProviderError(`${PROVIDER_NAMES[provider]} 返回了无法解析的数据`);
-    const code = int(raw, 'code'), inner = int(raw, 'req_1/code');
+    const code = int(raw, 'code'), inner = int(raw, 'req_1/code') || int(raw, 'req/code') || int(raw, 'music.search.SearchCgiService/code');
     /* GetPlayLyricInfo answers 24001 when QQ has no lyric for the song. */
     if (provider === 'qq' && code === 0 && inner === 24001) return raw;
     if (provider === 'qq' && code === -1901) return raw;
@@ -1278,10 +1339,12 @@
       return this.call('POST', '/api/bind', payload);
     }
     remove(track) { return this.call('POST', '/api/unbind', { track }); }
-    /* Same contract as an Http transport: resolves {status, body, retryAfter}. */
+    /* Same contract as an Http transport: resolves {status, body, retryAfter, setCookie}.
+     * set_cookie carries the NetEase sign-in cookie across the relay (server >= this version). */
     async relay(req, signal) {
       const answer = await this.call('POST', '/api/relay', { method: req.method, url: req.url, headers: req.headers || {}, body: req.body == null ? null : String(req.body) }, signal);
-      return { status: answer.status | 0, body: typeof answer.body === 'string' ? answer.body : '', retryAfter: answer.retry_after || null };
+      const cookies = Array.isArray(answer.set_cookie) ? answer.set_cookie.filter(c => typeof c === 'string') : undefined;
+      return { status: answer.status | 0, body: typeof answer.body === 'string' ? answer.body : '', retryAfter: answer.retry_after || null, setCookie: cookies };
     }
   }
 

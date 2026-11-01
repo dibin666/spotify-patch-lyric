@@ -105,7 +105,7 @@
   const DEFAULTS = {
     preferred_provider: 'netease', spotify_first: false, prefetch: true, verify_lyrics: true, relay: true,
     translation: true, word_sync: true, mini_player: true, font_scale: 1, color_mode: 'cover', only_eligible: false,
-    server_url: '', server_token: '',
+    server_url: '', server_token: '', comments_plugin: false,
   };
   const cleanServerUrl = url => String(url || '').trim().replace(/\/+$/, '');
   class Store {
@@ -283,7 +283,8 @@
     const headers = {};
     for (const [name, value] of Object.entries(req.headers || {})) if (!FORBIDDEN_HEADERS.test(name)) headers[name] = value;
     const response = await fetch(req.url, {
-      method: req.method || 'GET', headers, body: req.body == null ? undefined : req.body, credentials: 'omit',
+      method: req.method || 'GET', headers, body: req.body == null ? undefined : req.body,
+      credentials: req.credentials === 'include' ? 'include' : 'omit',
       referrerPolicy: 'no-referrer', cache: 'no-store', redirect: 'error', signal: withTimeout(signal, 12000),
     });
     return { status: response.status, body: await response.text(), retryAfter: response.headers.get('retry-after') };
@@ -361,7 +362,32 @@
       }, true);
       this.onState(this.playerAPI.getState());
       checkBackend().then(() => this.onEngine());
+      this.loadPlugins();
       log(`v${VERSION} ready (${currentMode()})`);
+    }
+    /* Optional add-ons ship as separate files next to the bundle and are only fetched
+     * when installed in the settings: /spot-lyric/<name>.js registers window
+     * globals that are mounted with the host API below. */
+    loadPlugins() {
+      if (!this.store.setting('comments_plugin')) return;
+      if (document.querySelector('script[src*="spot-lyric-comments.js"]')) return;
+      const script = h('script', { src: '/spot-lyric/spot-lyric-comments.js', defer: 'defer' });
+      script.onload = () => {
+        try { window.SpotLyricComments && window.SpotLyricComments.mount(this.pluginHost()); }
+        catch (e) { console.error('[spot-lyric] comments plugin failed', e); this.commentsError = String(e && e.message || e); }
+      };
+      script.onerror = () => { this.commentsMissing = true; log('comments plugin file missing'); };
+      document.head.append(script);
+    }
+    /* Everything an add-on needs: no other part of this IIFE is reachable from a
+     * plugin file, and a plugin must work with this surface alone. */
+    pluginHost() {
+      if (!this._host) this._host = {
+        app: this, Core, h, svg, ICON, NAMES, toast, confirmDialog, applyTheme, setVar, setText, fmtTime,
+        transport: providerTransport, http: this.engine.http, version: VERSION,
+        reload: () => location.reload(),
+      };
+      return this._host;
     }
     /* Cloud <-> pure local from the settings panel; the current track is matched again. */
     setMode(mode) {
@@ -1599,6 +1625,8 @@
         h('h3', null, '时间校准'),
         offsetRow('全局偏移', globalOffset, v => engine.setOffset(v, true)),
         offsetRow('当前歌曲偏移', trackOffset, v => engine.setOffset(v, false), local ? undefined : '正值让歌词提前显示 · 上传按钮会随歌词一起上传'),
+        h('h3', null, '插件'),
+        this.pluginRow(),
         h('h3', null, '使用方式与网络'),
         modeRow,
         ...(local ? [] : [h('div', { class: 'sl-setting' }, h('span', { class: 'sl-setting-text' }, h('span', null, '服务器状态'), h('small', { class: serverState.ok ? 'sl-good-text' : serverState.ok === false ? 'sl-error' : '' }, serverLine)),
@@ -1618,6 +1646,31 @@
           h('small', null, `音乐平台 ${stats.requests} 次请求 · 本地服务 ${localStats.requests} 次 · 歌词服务器 ${cloudStats.requests} 次 · ${fmtBytes(stats.sent_bytes + stats.received_bytes + localStats.sent_bytes + localStats.received_bytes + cloudStats.sent_bytes + cloudStats.received_bytes)} · 缓存命中 ${stats.cache_hits} 次`)),
           h('button', { type: 'button', class: 'sl-btn sl-btn-ghost sl-btn-small', onclick: async () => { await store.cacheClear(); toast(local ? '本机缓存已清理，绑定的匹配与本地歌词已保留' : '本机缓存已清理，服务器上的匹配与本地歌词已保留'); } }, '清理缓存')),
         this.aboutRow());
+    }
+    /* Optional add-ons (installed = loaded on the next start): the NetEase comments
+     * area. Toggling always takes effect after a reload; a one-click restart is offered. */
+    pluginRow() {
+      const app = this.app, installed = !!app.store.setting('comments_plugin'), loaded = !!window.SpotLyricComments;
+      const status = app.commentsError ? `加载失败：${app.commentsError}`
+        : app.commentsMissing ? '已安装 · 插件文件缺失，请重新运行安装命令更新插件'
+        : installed ? loaded ? '已安装 · 歌词页右下角进入' : '已安装 · 重新加载界面后生效'
+        : '在歌词页查看网易云音乐的热门与最新评论，支持登录、点赞和发布';
+      return h('div', { class: 'sl-setting' },
+        h('span', { class: 'sl-setting-text' }, h('span', null, '网易云评论区'),
+          h('small', { class: app.commentsError || app.commentsMissing ? 'sl-error' : installed ? 'sl-good-text' : '' }, status)),
+        h('button', { type: 'button', class: installed ? 'sl-btn sl-btn-ghost sl-btn-small' : 'sl-btn sl-btn-green sl-btn-small',
+          onclick: () => this.toggleCommentsPlugin(installed) }, installed ? '卸载' : '安装'));
+    }
+    async toggleCommentsPlugin(installed) {
+      this.app.store.set('comments_plugin', !installed);
+      const ok = await confirmDialog({
+        title: installed ? '已卸载网易云评论区插件' : '已安装网易云评论区插件',
+        body: installed
+          ? '重新加载界面后移除评论区入口；也可以稍后自行重启 Spotify。'
+          : '重新加载界面后，歌词页右下角会出现评论区入口；也可以稍后自行重启 Spotify。',
+        confirm: '立即重启', cancel: '稍后',
+      });
+      if (ok) location.reload(); else this.renderBody();
     }
     /* Version, and the update check / the new version's notes. */
     aboutRow() {

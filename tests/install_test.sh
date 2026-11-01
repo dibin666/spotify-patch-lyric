@@ -66,6 +66,12 @@ check "settings kept" 'grep -q "^mode=cloud" "$T/data/config" && grep -q "^reque
 check "no leftovers" '[[ ! -e $T/data/app.old ]]'
 check "still one PATH line" '[[ $(grep -c "added by spot-lyric" "$HOME/.bashrc") == 1 ]]'
 
+echo "== 3.5 same version but a missing file: the whole release is fetched again"
+rm -f "$T/data/app/src/comments.js"
+out=$("$HOME/.local/bin/spot-lyric" update --no-restart 2>&1 </dev/null); rc=$?; echo "$out" | sed 's/^/     /' | tail -4
+check "exit 0" '[[ $rc == 0 ]]'
+check "incomplete copy is re-downloaded" '[[ $out == *"本地文件不完整"* && -f $T/data/app/src/comments.js ]]'
+
 echo "== 4. update site down: keeps working with the installed copy"
 kill $srv; wait $srv 2>/dev/null
 out=$(SPOT_LYRIC_SITE=http://127.0.0.1:1 "$HOME/.local/bin/spot-lyric" status 2>&1 </dev/null); rc=$?

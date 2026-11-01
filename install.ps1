@@ -38,6 +38,15 @@
         if ((Test-Path -LiteralPath $v) -and (Test-Path -LiteralPath (Join-Path $App 'patch.ps1'))) { return ([IO.File]::ReadAllText($v)).Trim() }
         return ''
     }
+    # Everything an update relies on: a copy missing any of these is re-downloaded
+    # even when its VERSION already matches, so the update always runs a complete,
+    # consistent release (e.g. files added by a newer version can never be absent).
+    $AppFiles = @('patch.ps1', 'install.ps1', 'VERSION', 'src\core.js', 'src\app.js', 'src\app.css', 'src\comments.js')
+    function Test-AppComplete {
+        if (-not (Get-InstalledVersion)) { return $false }
+        foreach ($f in $AppFiles) { if (-not (Test-Path -LiteralPath (Join-Path $App $f))) { return $false } }
+        return $true
+    }
     function Get-LatestTag {
         try { $tag = (Invoke-RestMethod -Uri "$Site/latest" -TimeoutSec 20 -UseBasicParsing).tag; if ($tag -match '^v\d+\.\d+\.\d+$') { return $tag } } catch { }
         try {
@@ -70,6 +79,7 @@
             Remove-Item -LiteralPath "$App.old" -Recurse -Force -ErrorAction SilentlyContinue
             # Downloaded files carry the "from the internet" mark; patch.ps1 must run without a prompt.
             try { Get-ChildItem -LiteralPath $App -Recurse -File | Unblock-File } catch { }
+            if (-not (Test-AppComplete)) { Warn "下载的 $Tag 不完整（缺少插件文件）；如果更新异常请删除 $App 后重试" }
         } finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
     }
     # Latest release in $App. Offline with a copy installed: keep using it.
@@ -80,8 +90,10 @@
             if (-not $have) { Stop-With "无法获取最新版本（$Site、github.com 都连不上），请检查网络后重试" }
             Warn "无法检查新版本，继续使用已安装的 v$have"; return
         }
-        if ($have -eq $tag.Substring(1)) { Say "已是最新版本 $tag"; return }
-        if ($have) { Say "发现新版本：v$have → $tag，正在下载…" } else { Say "下载 Spot-Lyric $tag…" }
+        if ($have -eq $tag.Substring(1) -and $env:SPOT_LYRIC_FORCE -ne '1' -and (Test-AppComplete)) { Say "已是最新版本 $tag"; return }
+        if ($have -and $have -ne $tag.Substring(1)) { Say "发现新版本：v$have → $tag，正在下载…" }
+        elseif ($have) { Say "本地文件不完整，重新下载 $tag…" }
+        else { Say "下载 Spot-Lyric $tag…" }
         Get-Release $tag
     }
     function Confirm-App { if (-not (Get-InstalledVersion)) { Update-App } }

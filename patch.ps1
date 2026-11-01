@@ -227,16 +227,19 @@ function Get-Bundle([string]$M, [string]$S, [string]$R) {
     $app = $app.Replace('__SPOT_LYRIC_VERSION__', $Version).Replace('__SPOT_LYRIC_SERVER__', $S).Replace('__SPOT_LYRIC_MODE__', $M).Replace('__SPOT_LYRIC_REQUEST__', $R).Replace('__SPOT_LYRIC_LOCAL__', $LocalUrl).Replace('__SPOT_LYRIC_SITE__', $Site)
     $js = "/* Spot-Lyric for Spotify v$Version - generated, do not edit */`n" + $core + "`n" + $app
     $css = [IO.File]::ReadAllText((Join-Path $Root 'src\app.css'), $Utf8)
+    $comments = [IO.File]::ReadAllText((Join-Path $Root 'src\comments.js'), $Utf8).Replace('__SPOT_LYRIC_VERSION__', $Version)
     $jsBytes = $Utf8.GetBytes($js)
     $cssBytes = $Utf8.GetBytes($css)
-    # Same digest as patch.sh: sha256(js + "\0" + css)[:16]
-    $buffer = New-Object byte[] ($jsBytes.Length + 1 + $cssBytes.Length)
+    $commentsBytes = $Utf8.GetBytes($comments)
+    # Same digest as patch.sh: sha256(js + "\0" + css + "\0" + comments)[:16]
+    $buffer = New-Object byte[] ($jsBytes.Length + 1 + $cssBytes.Length + 1 + $commentsBytes.Length)
     [Array]::Copy($jsBytes, 0, $buffer, 0, $jsBytes.Length)
     [Array]::Copy($cssBytes, 0, $buffer, $jsBytes.Length + 1, $cssBytes.Length)
+    [Array]::Copy($commentsBytes, 0, $buffer, $jsBytes.Length + $cssBytes.Length + 2, $commentsBytes.Length)
     $sha = [Security.Cryptography.SHA256]::Create()
     $digest = (-join ($sha.ComputeHash($buffer) | ForEach-Object { $_.ToString('x2') })).Substring(0, 16)
     $sha.Dispose()
-    return @{ Js = $jsBytes; Css = $cssBytes; Digest = $digest }
+    return @{ Js = $jsBytes; Css = $cssBytes; Comments = $commentsBytes; Digest = $digest }
 }
 
 function Get-Injection([string]$Digest) {
@@ -278,6 +281,41 @@ function Write-ZipEntry($Archive, [string]$Name, [byte[]]$Bytes) {
 }
 
 # Builds the patched archive next to the target and swaps it in atomically.
+# The marker only proves an injection once finished; before deciding there is
+# nothing to do, every asset must still match the bundle byte for byte — a missing,
+# different or extra file is rewritten (REPAIRED) instead of trusted.
+function Test-BytesEqual([byte[]]$A, [byte[]]$B) {
+    if ($null -eq $A -or $null -eq $B -or $A.Length -ne $B.Length) { return $false }
+    for ($i = 0; $i -lt $A.Length; $i++) { if ($A[$i] -ne $B[$i]) { return $false } }
+    return $true
+}
+function Test-DirAssets([string]$Folder, $Assets) {
+    $dir = Join-Path $Folder $AssetDir
+    $names = @(($Assets.Keys | Sort-Object) -join '|')
+    $present = @((Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name } | Sort-Object) -join '|')
+    if ($present -ne $names) { return $false }
+    foreach ($name in $Assets.Keys) {
+        $bytes = [IO.File]::ReadAllBytes((Join-Path $dir $name))
+        if (-not (Test-BytesEqual $bytes $Assets[$name])) { return $false }
+    }
+    return $true
+}
+function Test-SpaAssets([string]$Spa, $Assets) {
+    $archive = [IO.Compression.ZipFile]::OpenRead($Spa)
+    try {
+        $names = @(($Assets.Keys | ForEach-Object { "$AssetDir/$_" } | Sort-Object) -join '|')
+        $present = @($archive.Entries | Where-Object { $_.FullName.StartsWith("$AssetDir/") } | ForEach-Object { $_.FullName } | Sort-Object) -join '|'
+        if ($present -ne $names) { return $false }
+        foreach ($key in $Assets.Keys) {
+            $entry = $archive.GetEntry("$AssetDir/$key")
+            $ms = New-Object IO.MemoryStream
+            try { $stream = $entry.Open(); try { $stream.CopyTo($ms) } finally { $stream.Dispose() } } catch { return $false }
+            if (-not (Test-BytesEqual $ms.ToArray() $Assets[$key])) { return $false }
+        }
+        return $true
+    } finally { $archive.Dispose() }
+}
+
 function Write-PatchedSpa([string]$Source, [string]$Target, [string]$Html, $Assets) {
     $temp = Join-Path (Split-Path -Parent $Target) ('.xpui-' + [Guid]::NewGuid().ToString('N') + '.spa')
     Copy-Item -LiteralPath $Source -Destination $temp -Force
@@ -300,7 +338,7 @@ function Write-PatchedSpa([string]$Source, [string]$Target, [string]$Html, $Asse
 
 # --------------------------------------------------------------- patch ----
 function Invoke-Patch([string]$Dir, $Bundle) {
-    $assets = [ordered]@{ 'spot-lyric.js' = $Bundle.Js; 'spot-lyric.css' = $Bundle.Css }
+    $assets = [ordered]@{ 'spot-lyric.js' = $Bundle.Js; 'spot-lyric.css' = $Bundle.Css; 'spot-lyric-comments.js' = $Bundle.Comments }
     $wanted = "$Version $($Bundle.Digest)"
     $apps = Join-Path $Dir 'Apps'
     $folder = Join-Path $apps 'xpui'
@@ -308,26 +346,32 @@ function Invoke-Patch([string]$Dir, $Bundle) {
     if (Test-Path -LiteralPath $index -PathType Leaf) {
         # Extracted xpui directory (e.g. after spicetify / SpotX developer mode)
         $html = [IO.File]::ReadAllText($index, $Utf8)
-        if ((Get-Marker $html) -eq $wanted) { return 'UNCHANGED' }
-        $null = New-Item -ItemType Directory -Force -Path (Join-Path $folder $AssetDir)
-        foreach ($name in $assets.Keys) { [IO.File]::WriteAllBytes((Join-Path (Join-Path $folder $AssetDir) $name), $assets[$name]) }
+        $repaired = (Get-Marker $html) -eq $wanted
+        if ($repaired -and (Test-DirAssets $folder $assets)) { return 'UNCHANGED' }
+        $assetDir = Join-Path $folder $AssetDir
+        Remove-Item -LiteralPath $assetDir -Recurse -Force -ErrorAction SilentlyContinue
+        $null = New-Item -ItemType Directory -Force -Path $assetDir
+        foreach ($name in $assets.Keys) { [IO.File]::WriteAllBytes((Join-Path $assetDir $name), $assets[$name]) }
         [IO.File]::WriteAllText($index, (Add-Injection $html $Bundle.Digest), $Utf8)
+        if ($repaired) { return "REPAIRED $folder" }
         return "PATCHED $folder"
     }
     $spa = Join-Path $apps 'xpui.spa'
     $backup = $spa + $BackupSuffix
     $html = Read-ZipText $spa 'index.html'
     $current = Get-Marker $html
-    if ($current -eq $wanted) { return 'UNCHANGED' }
+    if ($current -eq $wanted -and (Test-SpaAssets $spa $assets)) { return 'UNCHANGED' }
     if ($null -eq $current) {
         # Fresh (possibly freshly updated) archive from Spotify: it becomes the new original.
         Copy-Item -LiteralPath $spa -Destination $backup -Force
     }
-    else {
-        if (-not (Test-Path -LiteralPath $backup)) { Fail 'xpui.spa 已被修改但备份缺失，请重新安装 Spotify 后再试' }
-        $html = Read-ZipText $backup 'index.html'
-    }
-    Write-PatchedSpa $backup $spa (Add-Injection $html $Bundle.Digest) $assets
+    elseif (-not (Test-Path -LiteralPath $backup) -and $current -ne $wanted) { Fail 'xpui.spa 已被修改但备份缺失，请重新安装 Spotify 后再试' }
+    # Repairing drifted assets without a backup: the archive itself is the base —
+    # its index.html is already injected and Add-Injection normalises the block.
+    if (Test-Path -LiteralPath $backup) { $source = $backup; $html = Read-ZipText $backup 'index.html' }
+    else { $source = $spa; $html = Read-ZipText $spa 'index.html' }
+    Write-PatchedSpa $source $spa (Add-Injection $html $Bundle.Digest) $assets
+    if ($current -eq $wanted) { return "REPAIRED $spa" }
     return "PATCHED $spa"
 }
 
@@ -777,6 +821,7 @@ function Invoke-Apply([string]$Dir, [string]$M, [string]$S, [string]$R) {
         Fail ("注入失败：{0}`n如果提示文件被占用，请完全退出 Spotify（包括托盘图标）后重试；安装在 Program Files 时请以管理员身份运行" -f $_.Exception.Message)
     }
     if ($result -like 'PATCHED*') { Say "已注入歌词插件 v$Version（$(Mode-Name $M)）→ $($result.Substring(8))"; return @{ Changed = $true; Stopped = $stopped } }
+    if ($result -like 'REPAIRED*') { Say "插件文件不完整或不一致，已重新写入（v$Version）→ $($result.Substring(9))"; return @{ Changed = $true; Stopped = $stopped } }
     Say "插件已是最新（v$Version，$(Mode-Name $M)），无需修改"
     return @{ Changed = $false; Stopped = $stopped }
 }
