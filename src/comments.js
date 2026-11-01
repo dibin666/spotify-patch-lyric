@@ -458,7 +458,7 @@
   function songState(id) {
     const s = comments.get(id);
     if (s && Date.now() - s.at <= CACHE_TTL) return s;
-    const fresh = { at: 0, total: -1, hot: [], list: [], more: true, loading: false, loadingMore: false, error: '' };
+    const fresh = { at: 0, total: -1, hot: [], list: [], more: true, loading: false, loadingMore: false, error: '', moreError: '' };
     comments.set(id, fresh);
     return fresh;
   }
@@ -615,7 +615,8 @@
         const page = await fetchPage(song.id, 0);
         if (gen !== this.gen) return;
         state.at = Date.now(); state.total = page.total;
-        state.hot = page.hot; state.list = page.list; state.more = page.more;
+        state.hot = page.hot; state.list = page.list;
+        state.more = page.more && page.list.length > 0;
         state.error = '';
       } catch (e) {
         if (gen !== this.gen) return;
@@ -629,14 +630,20 @@
       const song = this.song;
       if (!song) return;
       const state = songState(song.id), gen = this.gen;
-      if (!state.more || state.loadingMore || state.loading || !state.at) return;
+      /* moreError pauses auto-loading until the 重试 button clears it — an erroring
+       * endpoint would otherwise be hit in a loop while the sentinel stays visible. */
+      if (!state.more || state.moreError || state.loadingMore || state.loading || !state.at) return;
       state.loadingMore = true; this.renderSentinel(state);
       try {
         const page = await fetchPage(song.id, state.list.length);
         if (gen !== this.gen) return;
         state.at = Date.now(); state.total = page.total;
-        state.list = state.list.concat(page.list);
-        state.more = page.more; state.error = '';
+        /* Pages can overlap; an empty or all-duplicate page IS the bottom — without
+         * new rows the same offset would be fetched forever. */
+        const seen = new Set(state.list.map(c => c.id));
+        const fresh = page.list.filter(c => c.id == null || !seen.has(c.id));
+        state.list = state.list.concat(fresh);
+        state.more = page.more && fresh.length > 0; state.error = '';
       } catch (e) {
         if (gen !== this.gen) return;
         state.moreError = e.message || String(e);
@@ -726,7 +733,10 @@
       this.listEl.replaceChildren(...latestRows);
       this.renderSentinel(state);
       this.sentinelObs.disconnect();
-      if (state && !loading) this.sentinelObs.observe(this.sentinel);
+      /* Only observe while there is more to load and no sticky error: an observed
+       * sentinel in view refires on every render, which is what kept failing
+       * pages retrying forever and stopped the list from ever reaching its end. */
+      if (state && !loading && state.more && !state.moreError) this.sentinelObs.observe(this.sentinel);
     }
     renderSentinel(state) {
       if (!state || !this.song) { setText(this.sentinel, ''); this.sentinel.hidden = true; return; }
