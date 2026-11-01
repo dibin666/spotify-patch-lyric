@@ -3,10 +3,11 @@ name: ci
 # Runs only for changes that matter: documentation-only pushes / pull requests do not
 # start it at all, and the "changes" job below skips every job whose inputs did not
 # change. Pull requests (also from forks) are tested; nothing is published for them.
+# Only main pushes run: a release ships when VERSION changes (the release job
+# creates the tag itself). Bare tag pushes deliberately do not start a run.
 on:
   push:
     branches: [main]
-    tags: ['v*']
     paths-ignore:
       - '**.md'
       - 'LICENSE*'
@@ -163,15 +164,13 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           tag="v$(tr -d ' \r\n' < VERSION)"
-          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
-            echo "tag $GITHUB_REF_NAME does not match VERSION ($tag)"; exit 1
-          fi
           # The release body is the version's CHANGELOG.md section only (short entries, see the file).
           awk -v tag="$tag" '/^## /{on=($2==tag); next} on' CHANGELOG.md | sed '/^[[:space:]]*$/d' > notes.md
           [ -s notes.md ] || { echo "CHANGELOG.md has no section for $tag"; exit 1; }
           cat notes.md
-          # Check-then-create races with a parallel run creating the same release
-          # (and with API read lag): try create first, fall back to edit.
+          # --target creates the git tag on the pushed commit when missing, so a
+          # plain "git push origin main" ships tag + release in this single run.
+          # create-then-edit keeps re-uploads idempotent.
           gh release create "$tag" --target "$GITHUB_SHA" --title "Spot-Lyric $tag" --notes-file notes.md \
             || gh release edit "$tag" --title "Spot-Lyric $tag" --notes-file notes.md
           gh release upload "$tag" dist/* --clobber

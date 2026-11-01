@@ -7,14 +7,6 @@ set -euo pipefail
 out="${GITHUB_OUTPUT:-/dev/stdout}"
 all() { for k in go plugin scripts docker; do echo "$k=true" >> "$out"; done; echo "running everything: $1"; exit 0; }
 
-# A release-tag push for this same commit starts its own run; the branch run of the
-# same push is a duplicate (the tag run also publishes the release). Skip it early.
-if [[ -z ${FILES+x} && ${EVENT:-} == push && ${GITHUB_REF_TYPE:-} == branch ]] \
-  && git tag --points-at "${GITHUB_SHA:-HEAD}" | grep -qx 'v[0-9].*'; then
-  for k in go plugin scripts docker; do echo "$k=false" >> "$out"; done
-  echo "commit carries a release tag: the tag run covers this"; exit 0
-fi
-
 if [[ -z ${FILES+x} ]]; then
   [[ ${EVENT:-} == workflow_dispatch ]] && all "manual run"
   [[ ${GITHUB_REF_TYPE:-} == tag ]] && all "tag"
