@@ -140,6 +140,9 @@ jobs:
   # Only for pushes to main / tags with new binaries, never for pull requests.
   release:
     needs: [binaries, patch-macos, patch-windows]
+    # A branch push and its tag push start parallel runs: without this group their
+    # release jobs race creating/uploading the same release and one of them fails.
+    concurrency: spot-lyric-release
     if: >-
       ${{ !cancelled() && github.event_name == 'push' && needs.binaries.result == 'success'
       && needs.patch-macos.result != 'failure' && needs.patch-windows.result != 'failure' }}
