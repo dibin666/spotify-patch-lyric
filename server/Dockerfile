@@ -6,7 +6,7 @@
 FROM golang:1.24-alpine AS build
 WORKDIR /src
 COPY go.mod *.go VERSION ./
-COPY server/*.go ./server/
+COPY server/ ./server/
 COPY cmd/ ./cmd/
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/spot-lyric-server ./cmd/spot-lyric-server \
  && mkdir -p /out/data && chown 1000:1000 /out/data \

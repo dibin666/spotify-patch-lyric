@@ -53,6 +53,8 @@ type Config struct {
 	Port                              int
 	Origins                           map[string]bool
 	TrustProxy, Relay, LogRequests    bool
+	Stats                             bool
+	StatsWindow, StatsKeep            int
 	NeteaseRealIP                     string
 	QQGap, NeteaseGap                 time.Duration
 	CacheBytes                        int
@@ -88,6 +90,7 @@ func loadConfig(env func(string) (string, bool)) Config {
 		CacheBytes:    num("CACHE_MB", 64) * 1024 * 1024,
 		ReadLimit:     num("RATE_LIMIT", 240), WriteLimit: num("WRITE_RATE_LIMIT", 30), RelayLimit: num("RELAY_RATE_LIMIT", 120),
 		R2Prefix: get("R2_PREFIX", "lyrics/"), LogRequests: get("LOG_REQUESTS", "") != "0",
+		Stats: get("STATS", "") != "0", StatsWindow: num("STATS_WINDOW_MINUTES", 15), StatsKeep: num("STATS_RETENTION_HOURS", 24) * 60,
 	}
 }
 
@@ -127,6 +130,7 @@ type App struct {
 	read      *RateLimiter
 	write     *RateLimiter
 	relayRate *RateLimiter
+	stats     *Stats
 
 	lockMu sync.Mutex
 	locks  map[string]*trackLock
@@ -146,6 +150,9 @@ func NewApp(cfg Config, bucket Bucket, transport Transport) *App {
 		cfg: cfg, cache: cache, bucket: bucket, storage: "r2", upstream: transport, locks: map[string]*trackLock{},
 		bindings: NewBindingStore(bucket, cache, cfg.R2Prefix),
 		read:     NewRateLimiter(cfg.ReadLimit), write: NewRateLimiter(cfg.WriteLimit), relayRate: NewRateLimiter(cfg.RelayLimit),
+	}
+	if cfg.Stats {
+		a.stats = NewStats(cfg.StatsWindow, cfg.StatsKeep)
 	}
 	if bucket.Local() {
 		a.storage = "local"
@@ -518,7 +525,21 @@ func (a *App) route(w http.ResponseWriter, r *http.Request, send func(int, any),
 		return nil
 	}
 	if r.Method == "GET" && path == "/" {
-		send(200, obj{"name": "spot-lyric-server", "version": version, "docs": "GET /api/bindings/<spotify-track-id> | POST /api/bind | /api/unbind | /api/relay"})
+		info := obj{"name": "spot-lyric-server", "version": version, "docs": "GET /api/bindings/<spotify-track-id> | POST /api/bind | /api/unbind | /api/relay"}
+		if a.stats != nil {
+			info["dashboard"] = "/dashboard"
+		}
+		send(200, info)
+		return nil
+	}
+	if a.stats != nil && (r.Method == "GET" || r.Method == "HEAD") && path == "/dashboard" {
+		h := w.Header()
+		h.Set("Content-Type", "text/html; charset=utf-8")
+		h.Set("Cache-Control", "no-store")
+		h.Set("X-Content-Type-Options", "nosniff")
+		*status = 200
+		w.WriteHeader(200)
+		_, _ = w.Write(dashboardHTML)
 		return nil
 	}
 	if !strings.HasPrefix(path, "/api/") {
@@ -534,10 +555,20 @@ func (a *App) route(w http.ResponseWriter, r *http.Request, send func(int, any),
 		return &HTTPError{410, "客户端版本过旧：请重新运行 patch 脚本更新 Spot-Lyric"}
 	}
 	address := a.clientAddress(r)
+	if a.stats != nil && clientPath(path) {
+		a.stats.see(address, r.UserAgent(), time.Now())
+	}
 	isWrite := path == "/api/bind" || path == "/api/unbind"
 	isRelay := path == "/api/relay"
 	if !a.read.Allow(address) || (isWrite && !a.write.Allow(address)) || (isRelay && !a.relayRate.Allow(address)) {
 		return &HTTPError{429, "请求过于频繁，请稍后再试"}
+	}
+	if a.stats != nil && r.Method == "GET" && path == "/api/stats" {
+		out := a.stats.snapshot(time.Now())
+		out["version"] = version
+		out["storage"] = a.storage
+		send(200, out)
+		return nil
 	}
 	if m := bindingPathRe.FindStringSubmatch(path); r.Method == "GET" && m != nil {
 		out, err := a.binding(r.Context(), m[1])

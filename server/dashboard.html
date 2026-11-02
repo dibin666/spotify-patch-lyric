@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Spot-Lyric · 服务器状态</title>
+<style>
+  :root {
+    --bg: #0b0e14; --panel: #151a23; --panel2: #1b212d; --border: #262f3e;
+    --text: #e6e9ef; --muted: #8b94a5; --accent: #1db954; --accent2: #1ed760;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 40px; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: .3px; }
+  h1 .dot { color: var(--accent); }
+  .meta { color: var(--muted); font-size: 13px; }
+  .meta code { color: var(--text); background: var(--panel2); border-radius: 4px; padding: 1px 6px; }
+  .grow { flex: 1; }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 14px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px;
+  }
+  .card .num { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .card .num.accent { color: var(--accent2); }
+  .card .label { color: var(--text); font-weight: 600; margin-top: 2px; }
+  .card .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px; margin-bottom: 14px;
+  }
+  .panel h2 { font-size: 15px; font-weight: 700; }
+  .hint { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .ranges { margin-left: auto; display: flex; gap: 6px; }
+  .ranges button { padding: 4px 10px; border-radius: 6px; font-size: 12px; }
+  .ranges button.on { background: var(--accent); border-color: var(--accent); color: #08130c; font-weight: 700; }
+  .platforms { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+  .plat {
+    display: flex; align-items: center; gap: 8px; background: var(--panel2);
+    border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px 6px 10px;
+  }
+  .plat .sw { width: 10px; height: 10px; border-radius: 50%; }
+  .plat b { font-variant-numeric: tabular-nums; }
+  .plat .name { color: var(--muted); }
+  .plat .pct { color: var(--muted); font-size: 12px; }
+  .chartwrap { position: relative; }
+  canvas { width: 100%; height: 320px; display: block; }
+  .tip {
+    position: absolute; pointer-events: none; background: rgba(10, 14, 20, .95);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px;
+    font-size: 12px; white-space: nowrap; z-index: 5; box-shadow: 0 6px 20px rgba(0,0,0,.5);
+  }
+  .tip .t { color: var(--muted); margin-bottom: 4px; }
+  .tip .u { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .tip .p { display: flex; gap: 6px; align-items: center; }
+  .tip .sw { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; color: var(--muted); font-size: 12px; }
+  .legend .sw { width: 9px; height: 9px; border-radius: 2px; display: inline-block; margin-right: 5px; }
+  footer { color: var(--muted); font-size: 12px; margin-top: 18px; line-height: 1.7; }
+  .empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+  .auth {
+    position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex;
+    align-items: center; justify-content: center; z-index: 10;
+  }
+  .auth[hidden] { display: none; }
+  .auth .box { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 26px; width: 340px; }
+  .auth h3 { font-size: 16px; margin-bottom: 8px; }
+  .auth p { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .auth input {
+    width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); padding: 9px 12px; font-size: 14px; margin-bottom: 12px; outline: none;
+  }
+  .auth input:focus { border-color: var(--accent); }
+  .auth button { width: 100%; background: var(--accent); border-color: var(--accent); color: #08130c; font-weight: 700; padding: 9px; }
+  .err { color: #f2736d; font-size: 12px; margin-bottom: 10px; min-height: 16px; }
+  .fatal { text-align: center; color: var(--muted); padding: 80px 20px; }
+  .fatal b { color: var(--text); display: block; font-size: 17px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app" hidden>
+  <header>
+    <h1>Spot-Lyric <span class="dot">●</span> 服务器状态</h1>
+    <span class="meta">版本 <code id="version">–</code> · 存储 <code id="storage">–</code></span>
+    <span class="grow"></span>
+    <span class="meta" id="updated"></span>
+    <button id="refresh">刷新</button>
+  </header>
+
+  <section class="cards">
+    <div class="card"><div class="num accent" id="active">–</div><div class="label">当前活跃用户</div><div class="sub" id="window">–</div></div>
+    <div class="card"><div class="num" id="unique">–</div><div class="label">独立用户</div><div class="sub" id="retention">–</div></div>
+    <div class="card"><div class="num" id="requests">–</div><div class="label">API 请求</div><div class="sub" id="retention2">–</div></div>
+    <div class="card"><div class="num" id="platformCount">–</div><div class="label">在线平台数</div><div class="sub">当前活跃用户</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>平台分布 <span class="hint">（当前活跃用户）</span></h2>
+    <div class="platforms" id="platforms"></div>
+  </section>
+
+  <section class="panel">
+    <div class="row">
+      <h2>活跃用户变化</h2>
+      <div class="ranges">
+        <button data-r="60">1 小时</button>
+        <button data-r="360">6 小时</button>
+        <button data-r="1440" class="on">24 小时</button>
+        <button data-r="0">全部</button>
+      </div>
+    </div>
+    <div class="chartwrap">
+      <canvas id="chart"></canvas>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <footer>
+    用户按客户端地址统计，仅保留加盐哈希、全部在内存中（重启清零），接口本身不产生记录。
+    同一地址的多个客户端计为一个用户；窗口内无请求即视为离开。
+    每 30 秒自动刷新。
+  </footer>
+</div>
+
+<div class="fatal" id="fatal" hidden></div>
+
+<div class="auth" id="auth" hidden>
+  <div class="box">
+    <h3>需要访问令牌</h3>
+    <p>该服务器配置了 API_TOKEN，请输入令牌查看统计（保存在当前会话中）。</p>
+    <div class="err" id="authErr"></div>
+    <input id="token" type="password" placeholder="API 令牌" autocomplete="off">
+    <button id="login">查看统计</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const PLATFORM_ORDER = ['windows', 'macos', 'linux', 'android', 'ios', 'service', 'other'];
+const PLATFORM = {
+  windows: ['Windows', '#4da3ff'], macos: ['macOS', '#c0c6d4'], linux: ['Linux', '#f2b138'],
+  android: ['Android', '#7bd88a'], ios: ['iOS', '#e8e8f0'], service: ['脚本/服务', '#9d7ff0'],
+  other: ['其他', '#64748b'],
+};
+const fmt = n => (n == null ? '–' : Number(n).toLocaleString('zh-CN'));
+const state = { data: null, range: 1440, pts: [], geo: null };
+let refreshTimer = null;
+
+function fail(html) {
+  $('#app').hidden = true;
+  const f = $('#fatal');
+  f.hidden = false;
+  f.innerHTML = html;
+}
+
+async function load() {
+  const headers = {};
+  const token = sessionStorage.getItem('sl_token');
+  if (token) headers.Authorization = 'Bearer ' + token;
+  let r;
+  try { r = await fetch('/api/stats', { headers, cache: 'no-store' }); }
+  catch (e) { return fail('<b>无法连接服务器</b>' + (e && e.message || e)); }
+  if (r.status === 401) { $('#auth').hidden = false; $('#authErr').textContent = token ? '令牌无效，请重新输入' : ''; return; }
+  if (r.status === 404) return fail('<b>服务器未开启统计</b>该服务器的 STATS 被设为 0，或版本不含此功能。');
+  if (!r.ok) return fail('<b>统计接口错误</b>HTTP ' + r.status);
+  $('#auth').hidden = true;
+  state.data = await r.json();
+  render();
+}
+
+function render() {
+  const d = state.data;
+  $('#app').hidden = false; $('#fatal').hidden = true;
+  $('#version').textContent = d.version || '–';
+  $('#storage').textContent = d.storage || '–';
+  $('#active').textContent = fmt(d.active_users);
+  $('#unique').textContent = fmt(d.unique_users);
+  $('#requests').textContent = fmt(d.requests);
+  const span = d.retention_minutes >= 60 && d.retention_minutes % 60 === 0
+    ? `最近 ${d.retention_minutes / 60} 小时` : `最近 ${d.retention_minutes} 分钟`;
+  $('#window').textContent = `最近 ${d.window_minutes} 分钟内有请求`;
+  $('#retention').textContent = span; $('#retention2').textContent = span;
+  const plats = d.platforms || {};
+  $('#platformCount').textContent = fmt(Object.keys(plats).length);
+  const el = $('#platforms');
+  el.innerHTML = '';
+  const total = Math.max(1, d.active_users);
+  const keys = PLATFORM_ORDER.filter(k => plats[k]).concat(Object.keys(plats).filter(k => !PLATFORM[k]));
+  if (!keys.length) el.innerHTML = '<span class="hint">当前没有活跃用户</span>';
+  for (const k of keys) {
+    const [name, color] = PLATFORM[k] || [k, '#64748b'];
+    const n = plats[k];
+    el.insertAdjacentHTML('beforeend',
+      `<div class="plat"><span class="sw" style="background:${color}"></span><span class="name">${name}</span><b>${fmt(n)}</b><span class="pct">${Math.round(n / total * 100)}%</span></div>`);
+  }
+  draw(-1);
+  $('#updated').textContent = '更新于 ' + new Date(d.now * 1000).toLocaleTimeString('zh-CN');
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(load, 30000);
+}
+
+/* Points within the chosen range, downsampled to roughly one per pixel. */
+function points() {
+  const all = (state.data && state.data.series) || [];
+  const cutoff = state.range > 0 ? state.data.now - state.range * 60 : 0;
+  const pts = all.filter(p => p.t >= cutoff);
+  const w = Math.max(200, $('#chart').clientWidth || 800);
+  const step = Math.max(1, Math.round(pts.length / w));
+  const out = [];
+  for (let i = 0; i < pts.length; i += step) {
+    let best = pts[i];
+    for (let j = i + 1; j < Math.min(i + step, pts.length); j++) if (pts[j].users > best.users) best = pts[j];
+    out.push(best);
+  }
+  return out;
+}
+
+function draw(hover) {
+  const cv = $('#chart'), ctx = cv.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight || 320;
+  if (cv.width !== W * dpr || cv.height !== H * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  const pts = state.pts = points();
+  const pad = { l: 40, r: 14, t: 14, b: 26 };
+  const iw = W - pad.l - pad.r, ih = H - pad.t - pad.b;
+  let dataMax = 0;
+  for (const p of pts) dataMax = Math.max(dataMax, p.users);
+  const niceStep = raw => {
+    const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
+    for (const m of [1, 2, 2.5, 5, 10]) if (m * mag >= raw) return m * mag;
+    return 10 * mag;
+  };
+  const step = niceStep(Math.max(1, dataMax / 3));
+  const maxY = step * Math.max(2, Math.ceil(dataMax * 1.08 / step));
+  const x = i => pad.l + (pts.length < 2 ? iw / 2 : i / (pts.length - 1) * iw);
+  const y = v => pad.t + ih - v / maxY * ih;
+  state.geo = { pad, iw, maxY };
+
+  /* grid + y labels */
+  ctx.font = '11px sans-serif'; ctx.fillStyle = '#8b94a5'; ctx.strokeStyle = '#232b38';
+  ctx.lineWidth = 1; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = 0; v <= maxY; v += step) {
+    const yy = y(v);
+    ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(W - pad.r, yy); ctx.stroke();
+    ctx.fillText(String(v), pad.l - 8, yy);
+  }
+  /* x labels */
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  const labels = Math.min(6, pts.length);
+  const rangeMin = state.range > 0 ? state.range : (pts.length ? (state.data.now - pts[0].t) / 60 : 0);
+  const dayFmt = rangeMin > 24 * 60;
+  const tf = t => new Date(t * 1000).toLocaleString('zh-CN', dayFmt
+    ? { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }
+    : { hour: '2-digit', minute: '2-digit' });
+  for (let i = 0; i < labels; i++) {
+    const idx = Math.round(i / Math.max(1, labels - 1) * (pts.length - 1));
+    if (pts[idx]) ctx.fillText(tf(pts[idx].t), x(idx), H - pad.b + 8);
+  }
+  const present = PLATFORM_ORDER.filter(k => pts.some(p => p.platforms && p.platforms[k]));
+  const legend = $('#legend');
+  legend.innerHTML = '<span class="sw" style="background:#1ed760;border-radius:50%"></span>活跃用户合计&nbsp;&nbsp;' +
+    present.map(k => `<span><span class="sw" style="background:${PLATFORM[k][1]}"></span>${PLATFORM[k][0]}</span>`).join(' ');
+  if (!pts.length || pts.every(p => !p.users)) {
+    ctx.fillStyle = '#8b94a5'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '13px sans-serif';
+    ctx.fillText('暂无活跃用户数据，等待客户端接入', pad.l + iw / 2, pad.t + ih / 2);
+    return;
+  }
+  /* stacked areas, bottom platform first */
+  const cum = pts.map(() => 0);
+  present.forEach((k, ki) => {
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const top = cum[i] + ((pts[i].platforms && pts[i].platforms[k]) || 0);
+      i ? ctx.lineTo(x(i), y(top)) : ctx.moveTo(x(0), y(top));
+    }
+    for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(x(i), y(cum[i]));
+    ctx.closePath();
+    ctx.fillStyle = PLATFORM[k][1] + (ki === 0 ? '55' : '66');
+    ctx.fill();
+    for (let i = 0; i < pts.length; i++) cum[i] += (pts[i].platforms && pts[i].platforms[k]) || 0;
+  });
+  /* total users line on top (a dot when there is a single minute of data) */
+  ctx.beginPath();
+  pts.forEach((p, i) => i ? ctx.lineTo(x(i), y(p.users)) : ctx.moveTo(x(0), y(p.users)));
+  ctx.strokeStyle = '#1ed760'; ctx.lineWidth = 1.8; ctx.stroke();
+  if (pts.length === 1) {
+    ctx.beginPath(); ctx.arc(x(0), y(pts[0].users), 4, 0, 7); ctx.fillStyle = '#1ed760'; ctx.fill();
+  }
+  /* hover crosshair */
+  if (hover >= 0 && hover < pts.length) {
+    ctx.strokeStyle = 'rgba(230,233,239,.35)'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(x(hover), pad.t); ctx.lineTo(x(hover), pad.t + ih); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(x(hover), y(pts[hover].users), 3.5, 0, 7); ctx.fillStyle = '#1ed760'; ctx.fill();
+  }
+}
+
+$('#chart').addEventListener('mousemove', e => {
+  const { pts, geo } = state;
+  if (!geo || !pts.length) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const rel = e.clientX - rect.left - geo.pad.l;
+  const idx = Math.max(0, Math.min(pts.length - 1, Math.round(rel / geo.iw * (pts.length - 1))));
+  const p = pts[idx];
+  draw(idx);
+  const tip = $('#tip');
+  const rows = PLATFORM_ORDER.filter(k => p.platforms && p.platforms[k])
+    .map(k => `<div class="p"><span class="sw" style="background:${PLATFORM[k][1]}"></span>${PLATFORM[k][0]}：${p.platforms[k]}</div>`).join('');
+  tip.innerHTML = `<div class="t">${new Date(p.t * 1000).toLocaleString('zh-CN')}</div>` +
+    `<div class="u">${p.users} 活跃用户 · ${p.requests} 请求/分</div>` + rows;
+  tip.hidden = false;
+  const left = Math.min(rect.width - tip.offsetWidth - 8, Math.max(8, e.clientX - rect.left + 14));
+  tip.style.left = left + 'px';
+  tip.style.top = Math.max(4, e.clientY - rect.top - tip.offsetHeight - 10) + 'px';
+});
+$('#chart').addEventListener('mouseleave', () => { $('#tip').hidden = true; draw(-1); });
+document.querySelectorAll('.ranges button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.ranges button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  state.range = +b.dataset.r;
+  draw(-1);
+});
+$('#refresh').onclick = load;
+$('#login').onclick = () => {
+  const t = $('#token').value.trim();
+  if (!t) { $('#authErr').textContent = '请输入令牌'; return; }
+  sessionStorage.setItem('sl_token', t);
+  $('#token').value = ''; $('#authErr').textContent = '';
+  load();
+};
+$('#token').addEventListener('keydown', e => { if (e.key === 'Enter') $('#login').click(); });
+window.addEventListener('resize', () => draw(-1));
+load();
+</script>
+</body>
+</html>

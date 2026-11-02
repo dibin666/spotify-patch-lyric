@@ -29,7 +29,7 @@ else falls back to the process environment.
 func LocalEnv(dataDir string) func(string) (string, bool) {
 	fixed := map[string]string{
 		"HOST": "127.0.0.1", "PORT": fmt.Sprint(LocalPort), "DATA_DIR": dataDir,
-		"RELAY": "1", "TRUST_PROXY": "0", "API_TOKEN": "", "LOG_REQUESTS": "0",
+		"RELAY": "1", "TRUST_PROXY": "0", "API_TOKEN": "", "LOG_REQUESTS": "0", "STATS": "0",
 	}
 	return func(k string) (string, bool) {
 		if v, ok := fixed[k]; ok {
