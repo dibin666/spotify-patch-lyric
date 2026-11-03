@@ -148,7 +148,7 @@ jobs:
     # release jobs race creating/uploading the same release and one of them fails.
     concurrency: spot-lyric-release
     if: >-
-      ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.version == 'true'
+      ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.version == 'true'
       && needs.binaries.result == 'success'
       && needs.patch-macos.result != 'failure' && needs.patch-windows.result != 'failure' }}
     runs-on: ubuntu-latest
