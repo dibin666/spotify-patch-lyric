@@ -40,7 +40,8 @@ env:
 
 jobs:
   # What changed: go (server program), plugin (src / JS tests), scripts (patch.sh / .ps1),
-  # docker (image inputs). Manual runs, tags and workflow edits run everything.
+  # docker (image inputs), version (VERSION bumped → a release may ship). Manual runs,
+  # tags and workflow edits run everything (a workflow edit alone still cannot release).
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -48,6 +49,7 @@ jobs:
       plugin: ${{ steps.diff.outputs.plugin }}
       scripts: ${{ steps.diff.outputs.scripts }}
       docker: ${{ steps.diff.outputs.docker }}
+      version: ${{ steps.diff.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -137,15 +139,17 @@ jobs:
           path: dist/${{ matrix.asset }}
           if-no-files-found: error
 
-  # Release v<VERSION>: created by the first push of a version, assets refreshed by later pushes.
+  # Release v<VERSION>: created by the push that bumps VERSION, never by server-only or
+  # plugin-only pushes (which would otherwise overwrite the published binaries mid-version).
   # Only for pushes to main / tags with new binaries, never for pull requests.
   release:
-    needs: [binaries, patch-macos, patch-windows]
+    needs: [changes, binaries, patch-macos, patch-windows]
     # A branch push and its tag push start parallel runs: without this group their
     # release jobs race creating/uploading the same release and one of them fails.
     concurrency: spot-lyric-release
     if: >-
-      ${{ !cancelled() && github.event_name == 'push' && needs.binaries.result == 'success'
+      ${{ !cancelled() && github.event_name == 'push' && needs.changes.outputs.version == 'true'
+      && needs.binaries.result == 'success'
       && needs.patch-macos.result != 'failure' && needs.patch-windows.result != 'failure' }}
     runs-on: ubuntu-latest
     permissions:
