@@ -58,6 +58,7 @@ func TestRelayThroughApp(t *testing.T) {
 		return &UpstreamResponse{Status: 200, Body: `{"code":200,"url":"` + r.URL + `"}`}, nil
 	}
 	app := NewApp(cfg, &DirBucket{dir: cfg.DataDir}, fake)
+	defer app.Close()
 	srv := httptest.NewServer(app)
 	defer srv.Close()
 
@@ -106,6 +107,7 @@ func TestStatsEndpoint(t *testing.T) {
 		return &UpstreamResponse{Status: 200, Body: "{}"}, nil
 	}
 	app := NewApp(cfg, &DirBucket{dir: cfg.DataDir}, fake)
+	defer app.Close()
 	srv := httptest.NewServer(app)
 	defer srv.Close()
 
@@ -164,6 +166,7 @@ func TestStatsDisabled(t *testing.T) {
 	cfg := loadConfig(func(k string) (string, bool) { v, ok := env[k]; return v, ok })
 	cfg.DataDir = t.TempDir()
 	app := NewApp(cfg, &DirBucket{dir: cfg.DataDir}, nil)
+	defer app.Close()
 	srv := httptest.NewServer(app)
 	defer srv.Close()
 	for _, path := range []string{"/dashboard", "/api/stats"} {
