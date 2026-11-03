@@ -1386,7 +1386,7 @@
   class Panel {
     constructor(app, view) {
       this.app = app; this.view = view; this.tab = 'match'; this.result = null; this.providerTab = app.store.setting('preferred_provider');
-      this.selected = null; this.preview = null; this.searching = false; this.query = '';
+      this.selected = null; this.preview = null; this.searching = false; this.searchSeq = 0; this.query = '';
       /* Tab order: 匹配歌词 | 评论 (plugin only) | 插件 | 设置. */
       const mkTab = (key, label) => h('button', { type: 'button', class: 'sl-tab', onclick: () => this.show(key) }, label);
       this.tabs = { match: mkTab('match', '匹配歌词') };
@@ -1409,6 +1409,10 @@
       if (pv && leaving === 'comments' && tab !== 'comments') pv.deactivate();
       if (pv && tab === 'comments') pv.activate();
       this.renderBody();
+      /* A track change landing on another tab clears the result without searching
+       * (trackChanged searches only on the match tab): search when the match tab
+       * is shown empty instead of leaving the "输入关键词搜索歌词" prompt up. */
+      if (tab === 'match' && !this.result && !this.searching) this.search();
     }
     trackChanged(initial) {
       const track = this.app.currentTrack;
@@ -1504,15 +1508,23 @@
     async search() {
       const query = (this.query || '').trim();
       if (!query || !this.app.currentTrack) return;
+      const seq = ++this.searchSeq;
       this.searching = true; this.selected = null; this.preview = null;
       this.renderResults();
       const track = this.app.currentTrack;
       const result = await this.app.engine.search(query).catch(e => ({ candidates: [], providers: [], error: e.message }));
-      if (track !== this.app.currentTrack) return;
-      this.searching = false; this.result = result;
-      if (result.providers.length) {
-        const current = result.providers.find(p => p.provider === this.providerTab);
-        if (current && !current.candidates.length) { const other = result.providers.find(p => p.candidates.length); if (other) this.providerTab = other.provider; }
+      /* A newer search owns the flag and the list: this one leaves both alone. */
+      if (seq !== this.searchSeq) return;
+      this.searching = false;
+      /* Track moved on while searching (and no newer search was started, e.g. on
+       * another tab): drop the stale answer; the next trackChanged / show() on the
+       * match tab searches again. */
+      if (track === this.app.currentTrack) {
+        this.result = result;
+        if (result.providers.length) {
+          const current = result.providers.find(p => p.provider === this.providerTab);
+          if (current && !current.candidates.length) { const other = result.providers.find(p => p.candidates.length); if (other) this.providerTab = other.provider; }
+        }
       }
       this.renderResults();
     }
@@ -1527,6 +1539,7 @@
       if (this.searching) { this.listEl.replaceChildren(h('div', { class: 'sl-loader sl-loader-small' }, h('i'), h('i'), h('i'))); return; }
       const group = groups.find(g => g.provider === this.providerTab) || groups[0];
       if (!this.result) { this.listEl.replaceChildren(h('p', { class: 'sl-empty-text' }, '输入关键词搜索歌词')); return; }
+      if (!group) { this.listEl.replaceChildren(h('p', { class: 'sl-empty-text sl-error' }, this.result.error || '没有搜索结果')); return; }
       if (group.error) { this.listEl.replaceChildren(h('p', { class: 'sl-empty-text sl-error' }, group.error)); return; }
       if (!group.searched) { this.listEl.replaceChildren(h('p', { class: 'sl-empty-text' }, '链接属于另一个来源，未搜索此来源')); return; }
       const list = group.candidates.filter(c => !onlyEligible || c.eligible);
