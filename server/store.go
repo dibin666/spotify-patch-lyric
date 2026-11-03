@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,7 +23,15 @@ type Bucket interface {
 	// Get returns ("", false, nil) when the object does not exist.
 	Get(ctx context.Context, key string) (string, bool, error)
 	Delete(ctx context.Context, key string) error
+	// List returns every object under prefix (used to reconcile the index).
+	List(ctx context.Context, prefix string) ([]ListItem, error)
 	Local() bool
+}
+
+type ListItem struct {
+	Key      string
+	Modified time.Time
+	Size     int64
 }
 
 /* ----------------------------------------------------------- cache ---- */
@@ -138,6 +147,36 @@ func (d *DirBucket) Delete(_ context.Context, key string) error {
 		return err
 	}
 	return nil
+}
+
+func (d *DirBucket) List(_ context.Context, prefix string) ([]ListItem, error) {
+	root, err := d.file(prefix)
+	if err != nil {
+		return nil, err
+	}
+	items := []ListItem{}
+	err = filepath.WalkDir(root, func(path string, e fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if e.IsDir() || strings.HasSuffix(e.Name(), ".tmp") {
+			return nil
+		}
+		rel, err := filepath.Rel(d.dir, path)
+		if err != nil {
+			return err
+		}
+		info, err := e.Info()
+		if err != nil {
+			return err
+		}
+		items = append(items, ListItem{Key: filepath.ToSlash(rel), Modified: info.ModTime(), Size: info.Size()})
+		return nil
+	})
+	if errors.Is(err, fs.ErrNotExist) {
+		return items, nil
+	}
+	return items, err
 }
 
 /* -------------------------------------------------- BindingStore ---- */

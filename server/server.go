@@ -131,6 +131,7 @@ type App struct {
 	write     *RateLimiter
 	relayRate *RateLimiter
 	stats     *Stats
+	db        *IndexDB
 
 	lockMu sync.Mutex
 	locks  map[string]*trackLock
@@ -157,7 +158,128 @@ func NewApp(cfg Config, bucket Bucket, transport Transport) *App {
 	if bucket.Local() {
 		a.storage = "local"
 	}
+	/* The permanent bindings index is best-effort: the API keeps working
+	 * (reads/writes go to the bucket) when SQLite cannot open. */
+	if db, err := OpenIndex(cfg.DataDir); err != nil {
+		log.Printf("[index] SQLite 不可用：%v", err)
+	} else {
+		a.db = db
+	}
 	return a
+}
+
+/* Close releases the index database. */
+func (a *App) Close() {
+	if a.db != nil {
+		_ = a.db.Close()
+	}
+}
+
+/* syncLoop keeps the index aligned with the object store: objects missing a
+ * row are fetched and indexed, rows whose object vanished are dropped. Runs
+ * once at startup and then periodically; new binds index themselves instantly. */
+func (a *App) syncLoop(ctx context.Context) {
+	if a.db == nil {
+		return
+	}
+	a.syncIndex(ctx)
+	t := time.NewTicker(2 * time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			a.syncIndex(ctx)
+		}
+	}
+}
+
+func (a *App) syncIndex(ctx context.Context) {
+	items, err := a.bucket.List(ctx, a.cfg.R2Prefix)
+	if err != nil {
+		log.Printf("[index] 列出存储对象失败：%v", err)
+		return
+	}
+	remote := map[string]bool{}
+	for _, it := range items {
+		name := strings.TrimSuffix(strings.TrimPrefix(it.Key, a.cfg.R2Prefix), ".json")
+		if spotifyIDRe.MatchString(name) {
+			remote[name] = true
+		}
+	}
+	known, err := a.db.IDs()
+	if err != nil {
+		log.Printf("[index] 读取索引失败：%v", err)
+		return
+	}
+	for id := range known {
+		if !remote[id] {
+			if err := a.db.Remove(id); err != nil {
+				log.Printf("[index] 移除 %s 失败：%v", id, err)
+			}
+		}
+	}
+	missing := make([]string, 0)
+	for id := range remote {
+		if !known[id] {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return
+	}
+	log.Printf("[index] 同步 %d 个未索引对象", len(missing))
+	const workers, perPass = 4, 500 /* bound one pass; the next tick continues */
+	if len(missing) > perPass {
+		missing = missing[:perPass]
+	}
+	jobs := make(chan string)
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for id := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+				doc, err := a.bindings.Get(ctx, id)
+				if err != nil {
+					log.Printf("[index] 读取 %s 失败：%v", id, err)
+					continue
+				}
+				if doc == nil {
+					_ = a.db.Remove(id) /* raced delete */
+					continue
+				}
+				text, err := marshalIndent(doc)
+				if err != nil {
+					continue
+				}
+				var parsed bindingDoc
+				if json.Unmarshal([]byte(text), &parsed) != nil || parsed.SpotifyURI == "" {
+					continue
+				}
+				if err := a.db.Upsert(id, &parsed); err != nil {
+					log.Printf("[index] 写入 %s 失败：%v", id, err)
+				}
+			}
+		}()
+	}
+	feed := true
+	for _, id := range missing {
+		select {
+		case jobs <- id:
+		case <-ctx.Done():
+			feed = false
+		}
+		if !feed {
+			break
+		}
+	}
+	close(jobs)
+	wg.Wait()
 }
 
 /* One write at a time per track, so the last click is also the last write. */
@@ -330,8 +452,10 @@ func (a *App) bind(ctx context.Context, body obj) (any, error) {
 			resultErr = a.saveError(id, err)
 			return
 		}
-		if a.stats != nil {
-			a.stats.recordUpload(doc)
+		if a.db != nil {
+			if err := a.db.Upsert(id, doc); err != nil {
+				log.Printf("[index] 更新 %s 失败：%v", id, err)
+			}
 		}
 		result = obj{"stored": a.storage, "updated_at": now, "binding": publicDoc(saved)}
 	})
@@ -354,8 +478,10 @@ func (a *App) unbind(ctx context.Context, body obj) (any, error) {
 			resultErr = &HTTPError{502, "从存储删除失败：" + err.Error()}
 			return
 		}
-		if a.stats != nil {
-			a.stats.removeUpload(id)
+		if a.db != nil {
+			if err := a.db.Remove(id); err != nil {
+				log.Printf("[index] 移除 %s 失败：%v", id, err)
+			}
 		}
 	})
 	if resultErr != nil {
@@ -377,11 +503,9 @@ func (a *App) binding(ctx context.Context, id string) (any, error) {
 }
 
 /* The full stored document (including the LRC copy) for the dashboard's lyric
- * viewer. Requires API_TOKEN so the public API keeps never serving lyric text. */
+ * viewer: shared lyrics are meant to be readable, so no extra secret beyond the
+ * optional API_TOKEN the whole API uses. */
 func (a *App) uploadDoc(ctx context.Context, id string) (any, error) {
-	if a.cfg.Token == "" {
-		return nil, &HTTPError{403, "查看歌词内容需要服务器配置 API_TOKEN"}
-	}
 	doc, err := a.bindings.Get(ctx, id)
 	if err != nil {
 		return nil, &HTTPError{502, err.Error()}
@@ -556,14 +680,18 @@ func (a *App) route(w http.ResponseWriter, r *http.Request, send func(int, any),
 		send(200, info)
 		return nil
 	}
-	if a.stats != nil && (r.Method == "GET" || r.Method == "HEAD") && path == "/dashboard" {
+	if a.stats != nil && (r.Method == "GET" || r.Method == "HEAD") && (path == "/dashboard" || path == "/lyrics") {
+		page := dashboardHTML
+		if path == "/lyrics" {
+			page = lyricsHTML
+		}
 		h := w.Header()
 		h.Set("Content-Type", "text/html; charset=utf-8")
 		h.Set("Cache-Control", "no-store")
 		h.Set("X-Content-Type-Options", "nosniff")
 		*status = 200
 		w.WriteHeader(200)
-		_, _ = w.Write(dashboardHTML)
+		_, _ = w.Write(page)
 		return nil
 	}
 	if !strings.HasPrefix(path, "/api/") {
@@ -592,6 +720,24 @@ func (a *App) route(w http.ResponseWriter, r *http.Request, send func(int, any),
 		out["version"] = version
 		out["storage"] = a.storage
 		send(200, out)
+		return nil
+	}
+	/* Every stored binding, searchable / sortable / paged (dashboard list). */
+	if a.stats != nil && r.Method == "GET" && path == "/api/uploads" {
+		if a.db == nil {
+			return &HTTPError{503, "歌词索引不可用（SQLite 初始化失败）"}
+		}
+		q := r.URL.Query()
+		limit, _ := strconv.Atoi(q.Get("limit"))
+		offset, _ := strconv.Atoi(q.Get("offset"))
+		rows, total, err := a.db.List(IndexQuery{
+			Q: strings.TrimSpace(q.Get("q")), Sort: q.Get("sort"),
+			Desc: q.Get("order") != "asc", Limit: limit, Offset: offset,
+		})
+		if err != nil {
+			return &HTTPError{502, err.Error()}
+		}
+		send(200, obj{"uploads": rows, "total": total})
 		return nil
 	}
 	if m := bindingPathRe.FindStringSubmatch(path); r.Method == "GET" && m != nil {

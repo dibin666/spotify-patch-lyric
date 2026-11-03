@@ -9,8 +9,10 @@ package server
  * the request's User-Agent. Addresses are kept in memory only as salted
  * hashes, and one bucket per minute is retained for STATS_RETENTION_HOURS
  * (default 24) plus the window, so the dashboard can chart active users over
- * the last day. Everything is in memory: a restart resets the statistics.
- * STATS=0 turns tracking and both endpoints off.
+ * the last day. User statistics are in memory only: a restart resets them.
+ * The stored bindings themselves are indexed in SQLite (db.go) and listed by
+ * GET /api/uploads; GET /lyrics serves the per-track lyric page. STATS=0 turns
+ * tracking and all of the dashboard endpoints off.
  */
 
 import (
@@ -26,6 +28,9 @@ import (
 //go:embed dashboard.html
 var dashboardHTML []byte
 
+//go:embed lyrics.html
+var lyricsHTML []byte
+
 /* One minute of traffic: distinct client keys (with their platform) + request count. */
 type statsBucket struct {
 	users    map[string]string
@@ -40,7 +45,6 @@ type Stats struct {
 	since   int64 /* first minute with data, in unix minutes; 0 = none yet */
 	lastMin int64 /* minute the buckets were last pruned for */
 	buckets map[int64]*statsBucket
-	uploads []obj /* recent binds, newest first */
 
 	cached   obj
 	cachedAt time.Time
@@ -225,69 +229,8 @@ func (s *Stats) snapshot(now time.Time) obj {
 		"window_minutes": s.window, "retention_minutes": s.keep,
 		"active_users": len(active), "platforms": platformsCopy(),
 		"unique_users": len(all), "requests": requests,
-		"series": series, "uploads": append([]obj{}, s.uploads...),
+		"series": series,
 	}
 	s.cached, s.cachedAt = result, now
 	return result
-}
-
-/* -------------------------------------------------- recent uploads ---- */
-
-/* maxUploads bounds the "最近上传" list on the dashboard (in memory only). */
-const maxUploads = 100
-
-/* uploadEntry is the dashboard row for one bind: track, links and lyric stats,
- * no lyric text (the view endpoint serves that under the API token). */
-func uploadEntry(doc *bindingDoc) obj {
-	e := obj{
-		"id": spotifyID(doc.SpotifyURI), "spotify_url": doc.SpotifyURL,
-		"source": doc.Source, "source_name": providerNames[doc.Source],
-		"sync_type": doc.SyncType, "line_count": doc.LineCount, "translated": doc.Translated,
-		"offset_ms": doc.OffsetMS, "bind_count": doc.BindCount, "updated_at": doc.UpdatedAt,
-	}
-	if doc.Track != nil {
-		e["title"] = doc.Track.Title
-		e["artists"] = doc.Track.Artists
-		e["album"] = doc.Track.Album
-		e["duration_ms"] = doc.Track.DurationMS
-	}
-	if doc.Match != nil {
-		e["provider"] = doc.Match.Provider
-		e["provider_name"] = doc.Match.ProviderName
-		e["provider_url"] = doc.Match.URL
-		e["provider_id"] = doc.Match.ID
-	}
-	return e
-}
-
-/* recordUpload prepends the just-saved binding to the list (same track twice = one row). */
-func (s *Stats) recordUpload(doc *bindingDoc) {
-	e := uploadEntry(doc)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	kept := s.uploads[:0]
-	for _, u := range s.uploads {
-		if u["id"] != e["id"] {
-			kept = append(kept, u)
-		}
-	}
-	s.uploads = append([]obj{e}, kept...)
-	if len(s.uploads) > maxUploads {
-		s.uploads = s.uploads[:maxUploads]
-	}
-	s.cached = nil
-}
-
-/* removeUpload drops the track's row after a successful unbind. */
-func (s *Stats) removeUpload(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	kept := s.uploads[:0]
-	for _, u := range s.uploads {
-		if u["id"] != id {
-			kept = append(kept, u)
-		}
-	}
-	s.uploads = kept
-	s.cached = nil
 }

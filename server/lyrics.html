@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>歌词 · Spot-Lyric</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%231ed760'/%3E%3Cpath d='M12 4.8c-4.7 0-8.5 3.3-8.5 7.2s3.8 7.2 8.5 7.2 8.5-3.3 8.5-7.2-3.8-7.2-8.5-7.2zm3.9 11.7c-2-1.2-4.6-1.5-7.5-.8-.3.1-.5-.1-.6-.3-.1-.3.1-.5.3-.6 3.3-.8 6-.5 8.3.9.2.1.3.5.1.7-.1.2-.4.3-.6.1zm1.1-2.3c-2.3-1.4-5.9-1.9-8.6-1.1-.3.1-.6-.1-.7-.4-.1-.3.1-.6.4-.7 3.1-.9 6.9-.5 9.6 1.1.3.2.4.5.2.8-.2.3-.6.4-.9-.3v-.3zm.1-2.5c-2.8-1.6-7.4-1.8-10-.9-.4.1-.8-.1-.9-.5-.1-.4.1-.8.5-.9 3-.9 8.1-.7 11.3 1.2.3.2.5.6.3 1s-.7.4-1.2.1z' fill='%23000'/%3E%3C/svg%3E">
+<style>
+  @font-face {
+    font-family: 'SpotifyMixUI';
+    src: url('https://encore.scdn.co/fonts/SpotifyMixUI-Regular-76c92fb1a35c462f73429fa8865163eb.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'SpotifyMixUI';
+    src: url('https://encore.scdn.co/fonts/SpotifyMixUI-Bold-09c45a3a0ce9d2971e62cb26e97760fb.woff2') format('woff2');
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'SpotifyMixUITitle';
+    src: url('https://encore.scdn.co/fonts/SpotifyMixUITitleVariable-08bab3354d40f74e5177917b5ae80894.woff2') format('woff2');
+    font-weight: 200 900; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'SpotifyMixMono';
+    src: url('https://encore.scdn.co/fonts/SpotifyMixMono-Regular-134eeb986fc0f94a9f0acb9cedaeb584.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  :root {
+    --font: 'SpotifyMixUI', 'CircularSp', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+    --font-title: 'SpotifyMixUITitle', 'SpotifyMixUI', 'CircularSp', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    --font-mono: 'SpotifyMixMono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+    --background-base: #121212;
+    --background-elevated-base: #1f1f1f;
+    --background-elevated-highlight: #2a2a2a;
+    --background-tinted-base: rgba(0, 0, 0, .08);
+    --essential-base: #ffffff;
+    --essential-subdued: #727272;
+    --essential-bright-accent: #1ed760;
+    --text-base: #ffffff;
+    --text-subdued: #b3b3b3;
+    --text-negative: #f15e6c;
+    --accent: #1ed760;
+    --accent-hover: #3be477;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { color-scheme: dark; }
+  body {
+    background: var(--background-base); color: var(--text-base);
+    font-family: var(--font); font-size: 14px; line-height: 1.5;
+    min-height: 100vh; -webkit-font-smoothing: antialiased;
+    display: flex; flex-direction: column;
+  }
+  .wrap { width: 100%; max-width: 900px; margin: 0 auto; padding: 24px 32px 48px; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+  .back {
+    display: inline-flex; align-items: center; gap: 6px; color: var(--text-subdued);
+    text-decoration: none; font-size: 13px; font-weight: 700; margin-bottom: 20px;
+    transition: color .1s ease;
+  }
+  .back:hover { color: var(--text-base); }
+  .back svg { width: 16px; height: 16px; fill: currentColor; }
+
+  .hero {
+    display: flex; align-items: flex-end; gap: 20px; padding: 8px 0 24px;
+    background: linear-gradient(180deg, rgba(30, 215, 96, .18), transparent 70%);
+    border-radius: 8px; margin: 0 -16px 24px; padding-left: 16px; padding-right: 16px;
+  }
+  .badge {
+    width: 96px; height: 96px; border-radius: 8px; flex: none;
+    background: var(--accent); display: grid; place-items: center;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+  }
+  .badge svg { width: 48px; height: 48px; fill: #000; }
+  .hero .meta { min-width: 0; }
+  .kicker { color: var(--text-subdued); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  h1 {
+    font-family: var(--font-title); font-size: 40px; font-weight: 800;
+    letter-spacing: -.02em; line-height: 1.15; margin: 2px 0 6px;
+    overflow-wrap: anywhere;
+  }
+  .sub { color: var(--text-subdued); font-size: 15px; }
+  .sub b { color: var(--text-base); font-weight: 400; }
+
+  .links { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font-family: var(--font); font-size: 14px; font-weight: 700;
+    border-radius: 500px; border: 0; padding: 8px 24px; min-height: 40px;
+    cursor: pointer; text-decoration: none; user-select: none;
+    transition: transform .1s ease, background-color .1s ease, border-color .1s ease, color .1s ease;
+  }
+  .btn:active { transform: scale(.96); }
+  .btn.primary { background: var(--essential-bright-accent); color: #000; }
+  .btn.primary:hover { background: var(--accent-hover); transform: scale(1.04); }
+  .btn.ghost { background: transparent; color: var(--text-base); border: 1px solid var(--essential-subdued); }
+  .btn.ghost:hover { border-color: var(--essential-base); transform: scale(1.04); }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn.primary svg { fill: #000; }
+  .btn.ghost svg { fill: var(--text-base); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--background-elevated-highlight); color: var(--text-subdued);
+    border-radius: 500px; padding: 5px 12px; font-size: 12px; white-space: nowrap;
+  }
+  .chip b { color: var(--text-base); font-weight: 700; }
+
+  .lyrics {
+    background: var(--background-elevated-base); border-radius: 8px;
+    padding: 28px 32px; flex: 1; min-height: 240px;
+  }
+  .lyrics .ln { padding: 5px 0; font-size: 17px; line-height: 1.8; }
+  .lyrics .ln .tl { color: var(--text-subdued); font-size: 14px; line-height: 1.6; }
+  .lyrics pre {
+    font-family: var(--font-mono); font-size: 13px; line-height: 1.7;
+    color: var(--text-subdued); white-space: pre-wrap; word-break: break-all;
+  }
+  .msg { padding: 60px 20px; text-align: center; color: var(--text-subdued); }
+  .msg b { color: var(--text-base); display: block; font-size: 17px; margin-bottom: 6px; }
+
+  /* token prompt (only when the server configured API_TOKEN) */
+  .auth {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, .7); display: flex;
+    align-items: center; justify-content: center; z-index: 30;
+  }
+  .auth[hidden] { display: none; }
+  .auth .box { background: var(--background-elevated-highlight); border-radius: 8px; padding: 32px; width: 360px; }
+  .auth h3 { font-family: var(--font-title); font-size: 20px; font-weight: 800; margin-bottom: 10px; }
+  .auth p { color: var(--text-subdued); font-size: 13px; margin-bottom: 18px; }
+  .auth input {
+    width: 100%; background: var(--background-tinted-base); border: 1px solid var(--essential-subdued);
+    border-radius: 4px; color: var(--text-base); padding: 12px 14px; font-size: 14px;
+    font-family: var(--font); margin-bottom: 14px; outline: none;
+  }
+  .auth input:hover { border-color: var(--text-base); }
+  .auth input:focus { border-color: var(--essential-base); }
+  .auth .btn { width: 100%; }
+  .err { color: var(--text-negative); font-size: 12px; margin-bottom: 10px; min-height: 16px; }
+
+  footer { color: var(--text-subdued); font-size: 12px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app" hidden>
+  <a class="back" href="/dashboard"><svg viewBox="0 0 24 24"><path d="M15.7 4.3a1 1 0 0 1 0 1.4L9.4 12l6.3 6.3a1 1 0 0 1-1.4 1.4l-7-7a1 1 0 0 1 0-1.4l7-7a1 1 0 0 1 1.4 0z"/></svg>返回列表</a>
+
+  <div class="hero">
+    <div class="badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v10.6a3.6 3.6 0 1 0 1.4 2.8V7.5h4.4a1 1 0 0 0 0-2h-4.8A1 1 0 0 0 12 6zM9.5 4.1a.9.9 0 0 1 .9-.9h.01a.9.9 0 0 1 0 1.8h-.01a.9.9 0 0 1-.9-.9z"/></svg></div>
+    <div class="meta">
+      <div class="kicker">已保存歌词</div>
+      <h1 id="title">–</h1>
+      <div class="sub" id="sub">–</div>
+    </div>
+  </div>
+
+  <div class="links" id="links"></div>
+  <div class="chips" id="meta"></div>
+
+  <div class="lyrics" id="body"><div class="msg">加载中…</div></div>
+
+  <footer id="foot"></footer>
+</div>
+
+<div class="msg" id="fatal" hidden></div>
+
+<div class="auth" id="auth" hidden>
+  <div class="box">
+    <h3>需要访问令牌</h3>
+    <p>该服务器配置了 API_TOKEN，请输入令牌查看歌词（保存在当前会话中）。</p>
+    <div class="err" id="authErr"></div>
+    <input id="token" type="password" placeholder="API 令牌" autocomplete="off">
+    <button class="btn primary" id="login">查看歌词</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const SOURCE = {
+  netease: ['网易云音乐', '#ec4141'], qq: ['QQ 音乐', '#31c27c'],
+  local: ['本地上传', '#b3b3b3'], spotify: ['Spotify', '#1ed760'],
+};
+const SYNC = { word: '逐字歌词', line: '逐行歌词', unsynced: '无时间轴' };
+const SPOTIFY_ICON = '<svg viewBox="0 0 24 24"><path d="M12 1.5C6.2 1.5 1.5 6.2 1.5 12S6.2 22.5 12 22.5 22.5 17.8 22.5 12 17.8 1.5 12 1.5zm4.8 15.2c-.2.3-.6.4-.9.2-2.5-1.5-5.6-1.9-9.3-1-.3.1-.7-.1-.8-.4-.1-.3.1-.7.4-.8 4-1 7.4-.6 10.2 1.1.3.2.4.6.4.9zm1.3-2.9c-.2.4-.7.5-1 .3-2.9-1.7-7.2-2.3-10.6-1.3-.4.1-.8-.1-.9-.5-.1-.4.1-.8.5-.9 3.8-1.1 8.5-.6 11.8 1.4.3.2.5.7.2 1zm.1-3c-3.4-2-9.1-2.2-12.4-1.2-.5.1-1-.1-1.1-.6-.1-.5.1-1 .6-1.1 3.7-1.1 10-.9 13.9 1.4.4.3.6.8.3 1.2-.3.4-.8.5-1.3.3z"/></svg>';
+const DL_ICON = '<svg viewBox="0 0 24 24"><path d="M12 3a1 1 0 0 1 1 1v8.6l3.3-3.3a1 1 0 0 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4L11 12.6V4a1 1 0 0 1 1-1zM4 19a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1z"/></svg>';
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const id = new URLSearchParams(location.search).get('id') || '';
+
+function headers() {
+  const h = {};
+  const token = sessionStorage.getItem('sl_token');
+  if (token) h.Authorization = 'Bearer ' + token;
+  return h;
+}
+
+function fail(html) {
+  $('#app').hidden = true;
+  const f = $('#fatal');
+  f.hidden = false;
+  f.innerHTML = html;
+}
+
+async function load() {
+  if (!id) return fail('<b>缺少参数</b>链接应为 /lyrics?id=<spotify-track-id>');
+  let r;
+  try { r = await fetch('/api/uploads/' + encodeURIComponent(id), { headers: headers(), cache: 'no-store' }); }
+  catch (e) { return fail('<b>无法连接服务器</b>' + esc(e && e.message || e)); }
+  if (r.status === 401) { $('#auth').hidden = false; $('#authErr').textContent = sessionStorage.getItem('sl_token') ? '令牌无效，请重新输入' : ''; return; }
+  if (r.status === 404) return fail('<b>歌词不存在</b>该绑定已被移除，或从未上传过。');
+  if (!r.ok) return fail('<b>加载失败</b>HTTP ' + r.status);
+  $('#auth').hidden = true;
+  const doc = (await r.json()).binding || {};
+  render(doc);
+}
+
+function metaChip(k, v) {
+  if (v == null || v === '' || v === false) return '';
+  return `<span class="chip">${esc(k)} <b>${esc(v === true ? '是' : v)}</b></span>`;
+}
+
+function render(doc) {
+  $('#app').hidden = false; $('#fatal').hidden = true;
+  const track = doc.track || {};
+  const title = track.title || doc.spotify_uri || id;
+  document.title = title + ' · Spot-Lyric 歌词';
+  $('#title').textContent = title;
+  $('#sub').textContent = [(track.artists || []).join(' / '), track.album, track.duration_ms ? fmtTime(track.duration_ms) : ''].filter(Boolean).join(' · ');
+
+  const links = [];
+  if (doc.spotify_url) links.push(`<a class="btn primary" href="${esc(doc.spotify_url)}" target="_blank" rel="noopener">${SPOTIFY_ICON}在 Spotify 打开</a>`);
+  if (doc.match && doc.match.url) {
+    const pname = doc.match.provider_name || (SOURCE[doc.match.provider] || [])[0] || '来源平台';
+    links.push(`<a class="btn ghost" href="${esc(doc.match.url)}" target="_blank" rel="noopener">在${esc(pname)}打开</a>`);
+  }
+  if (doc.lrc) links.push(`<button class="btn ghost" id="dlLrc">${DL_ICON}下载 LRC</button>`);
+  $('#links').innerHTML = links.join('');
+  const dl = $('#dlLrc');
+  if (dl) dl.onclick = () => downloadLrc(doc, track);
+
+  const match = doc.match;
+  $('#meta').innerHTML = [
+    metaChip('来源', doc.source === 'local' ? '本地上传' : (match && match.provider_name) || (SOURCE[doc.source] || [])[0] || doc.source),
+    metaChip('匹配 ID', match && match.id),
+    metaChip('类型', SYNC[doc.sync_type] || doc.sync_type),
+    metaChip('行数', doc.line_count),
+    metaChip('翻译', doc.translated ? '有' : ''),
+    metaChip('偏移', doc.offset_ms ? doc.offset_ms + ' ms' : ''),
+    metaChip('绑定次数', doc.bind_count),
+    metaChip('上传于', doc.updated_at ? new Date(doc.updated_at).toLocaleString('zh-CN') : ''),
+  ].join('');
+
+  const body = $('#body');
+  const lines = doc.lyrics && doc.lyrics.lines;
+  if (lines && lines.length) {
+    body.innerHTML = lines.map(l => {
+      const text = l.text || (l.words || []).map(w => w.text).join('');
+      const tl = l.translated_text ? `<div class="tl">${esc(l.translated_text)}</div>` : '';
+      return `<div class="ln">${esc(text) || '&nbsp;'}${tl}</div>`;
+    }).join('');
+  } else if (doc.lrc) {
+    body.innerHTML = '<pre>' + esc(doc.lrc) + '</pre>';
+  } else {
+    body.innerHTML = '<div class="msg">存储的歌词内容为空。</div>';
+  }
+  $('#foot').textContent = `数据保存在服务器 SQLite 索引中，歌词内容来自对象存储 · ${doc.lyrics_sha256 ? 'SHA-256 ' + String(doc.lyrics_sha256).slice(0, 12) + '…' : ''}`;
+}
+
+function fmtTime(ms) {
+  const s = Math.round(ms / 1000);
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+
+function downloadLrc(doc, track) {
+  const artists = (track.artists || []).join(', ');
+  const name = ((artists ? artists + ' - ' : '') + (track.title || doc.spotify_uri || 'lyrics'))
+    .replace(/[\\/:*?"<>|]/g, '_') + '.lrc';
+  const blob = new Blob([doc.lrc], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+
+$('#login').onclick = () => {
+  const t = $('#token').value.trim();
+  if (!t) { $('#authErr').textContent = '请输入令牌'; return; }
+  sessionStorage.setItem('sl_token', t);
+  $('#token').value = ''; $('#authErr').textContent = '';
+  load();
+};
+$('#token').addEventListener('keydown', e => { if (e.key === 'Enter') $('#login').click(); });
+load();
+</script>
+</body>
+</html>

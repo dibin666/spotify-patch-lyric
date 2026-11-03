@@ -3,9 +3,11 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -173,6 +175,108 @@ func TestStatsDisabled(t *testing.T) {
 		if resp.StatusCode != 404 {
 			t.Errorf("%s = %d, want 404 when STATS=0", path, resp.StatusCode)
 		}
+	}
+}
+
+func TestUploadsIndexAndList(t *testing.T) {
+	env := map[string]string{"STATS": "1"}
+	cfg := loadConfig(func(k string) (string, bool) { v, ok := env[k]; return v, ok })
+	cfg.DataDir = t.TempDir()
+	app := NewApp(cfg, &DirBucket{dir: filepath.Join(cfg.DataDir, "objects")}, nil)
+	defer app.Close()
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	bind := func(id, title, artist string) int {
+		body := fmt.Sprintf(`{"track":{"uri":"spotify:track:%s","title":%q,"artists":[%q],"album":"Alb","duration_ms":200000},`+
+			`"lyrics":{"source":"local","lines":[{"text":"x","start_time_ms":1}]}}`, id, title, artist)
+		resp, err := http.Post(srv.URL+"/api/bind", "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	get := func(path string) (int, map[string]any) {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		return resp.StatusCode, out
+	}
+	if code := bind("AAAAAAAAAAAAAAAAAAAAAA", "Alpha", "Singer"); code != 200 {
+		t.Fatalf("bind A = %d", code)
+	}
+	if code := bind("BBBBBBBBBBBBBBBBBBBBBB", "Beta", "Singer"); code != 200 {
+		t.Fatalf("bind B = %d", code)
+	}
+
+	/* list: both rows, newest first */
+	code, out := get("/api/uploads")
+	if code != 200 {
+		t.Fatalf("/api/uploads = %d", code)
+	}
+	if out["total"] != float64(2) {
+		t.Fatalf("total = %v, want 2", out["total"])
+	}
+	uploads, _ := out["uploads"].([]any)
+	if len(uploads) != 2 || uploads[0].(map[string]any)["id"] != "BBBBBBBBBBBBBBBBBBBBBB" {
+		t.Fatalf("unexpected uploads order: %v", uploads)
+	}
+	/* search narrows to one row */
+	_, out = get("/api/uploads?q=alpha")
+	if out["total"] != float64(1) || out["uploads"].([]any)[0].(map[string]any)["title"] != "Alpha" {
+		t.Errorf("search: %v", out)
+	}
+	/* sort by title ascending puts Alpha first */
+	_, out = get("/api/uploads?sort=title&order=asc")
+	if out["uploads"].([]any)[0].(map[string]any)["title"] != "Alpha" {
+		t.Errorf("sort: %v", out["uploads"])
+	}
+	/* lyric document is readable without a token */
+	code, out = get("/api/uploads/AAAAAAAAAAAAAAAAAAAAAA")
+	if code != 200 {
+		t.Fatalf("uploadDoc = %d", code)
+	}
+	if binding, _ := out["binding"].(map[string]any); binding["lrc"] == "" {
+		t.Errorf("no lrc in binding: %v", binding)
+	}
+	/* unbind drops the row */
+	resp, err := http.Post(srv.URL+"/api/unbind", "application/json", strings.NewReader(
+		`{"track":{"uri":"spotify:track:BBBBBBBBBBBBBBBBBBBBBB","title":"Beta","artists":["Singer"],"duration_ms":200000}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	_, out = get("/api/uploads")
+	if out["total"] != float64(1) {
+		t.Errorf("after unbind total = %v, want 1", out["total"])
+	}
+
+	/* An object written straight into the bucket gets indexed by the reconcile pass. */
+	_, _ = app.bindings.Save(context.Background(), "CCCCCCCCCCCCCCCCCCCCCC", obj{
+		"spotify_url": "https://open.spotify.com/track/CCCCCCCCCCCCCCCCCCCCCC",
+		"spotify_uri": "spotify:track:CCCCCCCCCCCCCCCCCCCCCC",
+		"track":       obj{"uri": "spotify:track:CCCCCCCCCCCCCCCCCCCCCC", "title": "Gamma", "artists": []string{"X"}, "album": "", "duration_ms": 1},
+		"source":      "local", "sync_type": "line", "line_count": 1, "bind_count": 1,
+		"created_at": "2026-01-01T00:00:00.000Z", "updated_at": "2026-01-01T00:00:00.000Z",
+	}, nil)
+	app.syncIndex(context.Background())
+	_, out = get("/api/uploads?q=gamma")
+	if out["total"] != float64(1) {
+		t.Errorf("after reconcile total = %v, want 1", out["total"])
+	}
+	/* …and a row whose object vanished is dropped. */
+	if err := app.bindings.Remove(context.Background(), "AAAAAAAAAAAAAAAAAAAAAA"); err != nil {
+		t.Fatal(err)
+	}
+	app.syncIndex(context.Background())
+	_, out = get("/api/uploads")
+	if out["total"] != float64(1) || out["uploads"].([]any)[0].(map[string]any)["title"] != "Gamma" {
+		t.Errorf("after remove+reconcile: %v", out)
 	}
 }
 

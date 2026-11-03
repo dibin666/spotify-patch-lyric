@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>Spot-Lyric · 服务器状态</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%231ed760'/%3E%3Cpath d='M12 4.8c-4.7 0-8.5 3.3-8.5 7.2s3.8 7.2 8.5 7.2 8.5-3.3 8.5-7.2-3.8-7.2-8.5-7.2zm3.9 11.7c-2-1.2-4.6-1.5-7.5-.8-.3.1-.5-.1-.6-.3-.1-.3.1-.5.3-.6 3.3-.8 6-.5 8.3.9.2.1.3.5.1.7-.1.2-.4.3-.6.1zm1.1-2.3c-2.3-1.4-5.9-1.9-8.6-1.1-.3.1-.6-.1-.7-.4-.1-.3.1-.6.4-.7 3.1-.9 6.9-.5 9.6 1.1.3.2.4.5.2.8-.2.3-.6.4-.9-.3v-.3zm.1-2.5c-2.8-1.6-7.4-1.8-10-.9-.4.1-.8-.1-.9-.5-.1-.4.1-.8.5-.9 3-.9 8.1-.7 11.3 1.2.3.2.5.6.3 1s-.7.4-1.2.1z' fill='%23000'/%3E%3C/svg%3E">
 <style>
   /* Official Spotify web fonts (Encore), same CDN the web player uses. */
   @font-face {
@@ -152,7 +153,7 @@
 
   /* ---- uploads: Spotify playlist-style track list ---- */
   .uploads-head, .urow {
-    display: grid; grid-template-columns: 20px minmax(0, 5fr) minmax(0, 3fr) 120px 110px;
+    display: grid; grid-template-columns: 20px minmax(0, 4fr) minmax(0, 3fr) 120px 56px 120px;
     gap: 16px; align-items: center; padding: 0 16px;
   }
   .uploads-head {
@@ -161,9 +162,15 @@
     letter-spacing: .1em; text-transform: uppercase;
   }
   .uploads-head .r { text-align: right; }
+  .uploads-head .sort { cursor: pointer; user-select: none; }
+  .uploads-head .sort:hover { color: var(--text-base); }
+  .uploads-head .sort .arrow { display: none; font-style: normal; margin-left: 3px; }
+  .uploads-head .sort.on { color: var(--accent); }
+  .uploads-head .sort.on .arrow { display: inline; }
   .urow {
     height: 56px; border-radius: 6px; cursor: pointer; position: relative;
     transition: background-color .15s ease;
+    color: inherit; text-decoration: none; display: grid;
   }
   .urow:hover { background: rgba(255, 255, 255, .1); }
   .urow .idx { color: var(--text-subdued); font-variant-numeric: tabular-nums; text-align: right; }
@@ -182,53 +189,28 @@
   }
   .urow .src { display: flex; align-items: center; gap: 7px; color: var(--text-subdued); font-size: 13px; white-space: nowrap; overflow: hidden; }
   .urow .src .sw { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .urow .num { color: var(--text-subdued); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
   .urow .time { color: var(--text-subdued); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
   .uempty { padding: 40px 0; text-align: center; color: var(--text-subdued); font-size: 14px; }
-  @media (max-width: 760px) {
+  .more-wrap { display: flex; align-items: center; gap: 14px; padding: 12px 16px 4px; }
+  .lib-search {
+    display: flex; align-items: center; gap: 8px; flex: 0 1 340px;
+    background: var(--background-tinted-base); border: 1px solid transparent;
+    border-radius: 500px; padding: 0 14px; height: 36px; min-width: 180px;
+  }
+  .lib-search:hover { background: var(--background-elevated-highlight); border-color: var(--essential-subdued); }
+  .lib-search:focus-within { border-color: var(--essential-base); background: var(--background-elevated-highlight); }
+  .lib-search svg { width: 15px; height: 15px; fill: var(--text-subdued); flex: none; }
+  .lib-search input {
+    flex: 1; min-width: 0; background: none; border: 0; outline: none;
+    color: var(--text-base); font-family: var(--font); font-size: 13px;
+  }
+  .lib-search input::placeholder { color: var(--essential-subdued); }
+  @media (max-width: 860px) {
     .uploads-head .album, .urow .album { display: none; }
-    .uploads-head, .urow { grid-template-columns: 20px minmax(0, 5fr) 120px 110px; }
+    .uploads-head .num, .urow .num { display: none; }
+    .uploads-head, .urow { grid-template-columns: 20px minmax(0, 4fr) 110px 110px; }
   }
-
-  /* ---- dialog (Encore modal) ---- */
-  .dlg-wrap {
-    position: fixed; inset: 0; background: rgba(0, 0, 0, .7); z-index: 20;
-    display: flex; align-items: center; justify-content: center; padding: 24px;
-  }
-  .dlg-wrap[hidden] { display: none; }
-  .dialog {
-    background: var(--background-elevated-highlight); border-radius: 8px;
-    width: 720px; max-width: 100%; max-height: 86vh; display: flex; flex-direction: column;
-    box-shadow: 0 8px 40px rgba(0, 0, 0, .6); overflow: hidden;
-  }
-  .dlg-head {
-    display: flex; align-items: flex-start; gap: 12px; padding: 24px 24px 0;
-  }
-  .dlg-head .tt { flex: 1; min-width: 0; }
-  .dlg-head h3 {
-    font-family: var(--font-title); font-size: 22px; font-weight: 800; letter-spacing: -.01em;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .dlg-head .sub { color: var(--text-subdued); font-size: 14px; margin-top: 2px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .dlg-x {
-    flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%; cursor: pointer;
-    background: rgba(0, 0, 0, .3); color: var(--text-subdued); font-size: 15px; line-height: 1;
-    display: grid; place-items: center;
-  }
-  .dlg-x:hover { color: var(--text-base); transform: scale(1.06); }
-  .dlg-links { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px 24px 0; }
-  .dlg-meta { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 24px 0; }
-  .lyrics-scroll {
-    margin: 16px 24px 24px; padding: 18px 20px; overflow-y: auto;
-    background: var(--background-tinted-base); border-radius: 8px; min-height: 120px;
-  }
-  .lyrics-scroll .ln { padding: 3px 0; font-size: 15px; line-height: 1.7; }
-  .lyrics-scroll .ln .tl { color: var(--text-subdued); font-size: 13px; }
-  .lyrics-scroll pre {
-    font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65;
-    color: var(--text-subdued); white-space: pre-wrap; word-break: break-all;
-  }
-  .dlg-msg { padding: 40px 24px; text-align: center; color: var(--text-subdued); }
 
   footer { color: var(--text-subdued); font-size: 12px; margin-top: 20px; line-height: 1.7; }
   .empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-subdued); }
@@ -302,35 +284,29 @@
 
   <section class="panel">
     <div class="row">
-      <h2>最近上传</h2>
-      <span class="hint">用户点击上传到服务器的歌词 · 点击查看内容</span>
+      <h2>歌词库</h2>
+      <span class="hint" id="libHint">已保存的全部歌词 · 与存储实时同步</span>
+      <span class="grow"></span>
+      <div class="lib-search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 1 0 4.4 13.6l4.3 4.2a1 1 0 0 0 1.4-1.4l-4.2-4.3A7.5 7.5 0 0 0 10.5 3zm0 2a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11z"/></svg>
+        <input id="libQ" type="search" placeholder="搜索歌曲 / 歌手 / 专辑 / 来源 / ID" autocomplete="off" spellcheck="false">
+      </div>
     </div>
     <div class="uploads-head">
-      <span class="r">#</span><span>歌曲</span><span class="album">专辑</span><span>来源</span><span class="r">上传时间</span>
+      <span class="r">#</span><span class="sort" data-sort="title">歌曲<i class="arrow"></i></span><span class="sort album" data-sort="album">专辑<i class="arrow"></i></span><span class="sort" data-sort="source">来源<i class="arrow"></i></span><span class="sort r num" data-sort="bind_count">次数<i class="arrow"></i></span><span class="sort r on" data-sort="updated_at">上传时间<i class="arrow"></i></span>
     </div>
     <div id="uploads"></div>
+    <div class="more-wrap" id="moreWrap" hidden>
+      <button class="btn ghost small" id="more">加载更多</button>
+      <span class="hint" id="moreHint"></span>
+    </div>
   </section>
 
   <footer>
-    用户按客户端地址统计，仅保留加盐哈希、全部在内存中（重启清零），接口本身不产生记录。
+    用户按客户端地址统计，仅保留加盐哈希的活跃用户数据（内存中，重启清零），接口本身不产生记录。
     同一地址的多个客户端计为一个用户；窗口内无请求即视为离开。
-    每 30 秒自动刷新。
+    歌词库存放在服务器本地 SQLite 数据库中（重启保留），并与对象存储实时同步。每 30 秒自动刷新。
   </footer>
-</div>
-
-<div class="dlg-wrap" id="dlg" hidden>
-  <div class="dialog" role="dialog" aria-modal="true">
-    <div class="dlg-head">
-      <div class="tt">
-        <h3 id="dlgTitle">–</h3>
-        <div class="sub" id="dlgSub">–</div>
-      </div>
-      <button class="dlg-x" id="dlgClose" aria-label="关闭">✕</button>
-    </div>
-    <div class="dlg-links" id="dlgLinks"></div>
-    <div class="dlg-meta" id="dlgMeta"></div>
-    <div class="lyrics-scroll" id="dlgBody"><div class="dlg-msg">加载中…</div></div>
-  </div>
 </div>
 
 <div class="fatal" id="fatal" hidden></div>
@@ -358,13 +334,14 @@ const SOURCE = {
   netease: ['网易云音乐', '#ec4141'], qq: ['QQ 音乐', '#31c27c'],
   local: ['本地上传', '#b3b3b3'], spotify: ['Spotify', '#1ed760'],
 };
-const SYNC = { word: '逐字歌词', line: '逐行歌词', unsynced: '无时间轴' };
-const SPOTIFY_ICON = '<svg viewBox="0 0 24 24"><path d="M12 1.5C6.2 1.5 1.5 6.2 1.5 12S6.2 22.5 12 22.5 22.5 17.8 22.5 12 17.8 1.5 12 1.5zm4.8 15.2c-.2.3-.6.4-.9.2-2.5-1.5-5.6-1.9-9.3-1-.3.1-.7-.1-.8-.4-.1-.3.1-.7.4-.8 4-1 7.4-.6 10.2 1.1.3.2.4.6.4.9zm1.3-2.9c-.2.4-.7.5-1 .3-2.9-1.7-7.2-2.3-10.6-1.3-.4.1-.8-.1-.9-.5-.1-.4.1-.8.5-.9 3.8-1.1 8.5-.6 11.8 1.4.3.2.5.7.2 1zm.1-3c-3.4-2-9.1-2.2-12.4-1.2-.5.1-1-.1-1.1-.6-.1-.5.1-1 .6-1.1 3.7-1.1 10-.9 13.9 1.4.4.3.6.8.3 1.2-.3.4-.8.5-1.3.3z"/></svg>';
-const DL_ICON = '<svg viewBox="0 0 24 24"><path d="M12 3a1 1 0 0 1 1 1v8.6l3.3-3.3a1 1 0 0 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4L11 12.6V4a1 1 0 0 1 1-1zM4 19a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1z"/></svg>';
 const fmt = n => (n == null ? '–' : Number(n).toLocaleString('zh-CN'));
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const state = { data: null, range: 1440, pts: [], geo: null, doc: null };
-let refreshTimer = null;
+const state = {
+  data: null, range: 1440, pts: [], geo: null,
+  lib: { q: '', sort: 'updated_at', order: 'desc', rows: [], total: 0, loading: false },
+};
+let refreshTimer = null, searchTimer = null;
+const PAGE = 50;
 
 function fail(html) {
   $('#app').hidden = true;
@@ -428,126 +405,84 @@ function render() {
     el.insertAdjacentHTML('beforeend',
       `<div class="plat"><span class="sw" style="background:${color}"></span><span class="name">${name}</span><b>${fmt(n)}</b><span class="pct">${Math.round(n / total * 100)}%</span></div>`);
   }
-  renderUploads(d.uploads || []);
+  refreshLibrary();
   draw(-1);
   $('#updated').textContent = '更新于 ' + new Date(d.now * 1000).toLocaleTimeString('zh-CN');
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(load, 30000);
 }
 
-/* ------------------------------------------------ recent uploads ---- */
-function renderUploads(list) {
-  const el = $('#uploads');
-  if (!list.length) {
-    el.innerHTML = '<div class="uempty">还没有上传记录<br><span class="hint">用户在客户端点「使用此歌词」或上传按钮后会出现在这里</span></div>';
-    return;
+/* ------------------------------------------------------- lyrics library ---- */
+/* The list lives in SQLite on the server and mirrors the object store; it is
+ * searched / sorted there. Newest first is the default view. */
+async function refreshLibrary(append) {
+  const lib = state.lib;
+  if (lib.loading) return;
+  lib.loading = true;
+  const limit = append ? lib.rows.length + PAGE : Math.max(lib.rows.length, PAGE);
+  const params = new URLSearchParams({ sort: lib.sort, order: lib.order, limit: String(limit), offset: '0' });
+  if (lib.q) params.set('q', lib.q);
+  let r;
+  try { r = await fetch('/api/uploads?' + params, { headers: headers(), cache: 'no-store' }); }
+  catch (e) { lib.loading = false; $('#uploads').innerHTML = '<div class="uempty">无法加载歌词库：' + esc(e && e.message || e) + '</div>'; return; }
+  lib.loading = false;
+  if (r.status === 401) { $('#auth').hidden = false; $('#authErr').textContent = sessionStorage.getItem('sl_token') ? '令牌无效，请重新输入' : ''; return; }
+  if (!r.ok) { $('#uploads').innerHTML = '<div class="uempty">歌词库加载失败：HTTP ' + r.status + '</div>'; return; }
+  const out = await r.json();
+  lib.rows = out.uploads || [];
+  lib.total = out.total || 0;
+  renderLibrary();
+}
+
+function renderLibrary() {
+  const lib = state.lib, el = $('#uploads');
+  if (!lib.rows.length) {
+    el.innerHTML = lib.q
+      ? '<div class="uempty">没有匹配「' + esc(lib.q) + '」的歌词</div>'
+      : '<div class="uempty">还没有保存的歌词<br><span class="hint">用户在客户端点「使用此歌词」或上传按钮后会出现在这里</span></div>';
+  } else {
+    el.innerHTML = lib.rows.map((u, i) => {
+      const [sname, scolor] = SOURCE[u.source] || [u.source_name || u.source || '–', '#727272'];
+      const t = Date.parse(u.updated_at);
+      return `<a class="urow" href="/lyrics?id=${encodeURIComponent(u.id)}" title="点击查看歌词内容">
+        <span class="idx">${i + 1}</span>
+        <span><div class="title">${esc(u.title || u.id)}</div><div class="artists">${esc((u.artists || []).join(' / ') || '–')}</div></span>
+        <span class="album">${esc(u.album || '–')}</span>
+        <span class="src"><span class="sw" style="background:${scolor}"></span>${esc(u.source_name || sname)}</span>
+        <span class="num">${fmt(u.bind_count)}</span>
+        <span class="time" title="${t ? esc(new Date(t).toLocaleString('zh-CN')) : ''}">${ago(u.updated_at)}</span>
+      </a>`;
+    }).join('');
   }
-  el.innerHTML = list.map((u, i) => {
-    const [sname, scolor] = SOURCE[u.source] || [u.source_name || u.source || '–', '#727272'];
-    const title = esc(u.title || u.id);
-    const artists = esc((u.artists || []).join(' / ') || '–');
-    const t = Date.parse(u.updated_at);
-    return `<div class="urow" data-id="${esc(u.id)}" role="button" tabindex="0">
-      <span class="idx">${i + 1}</span>
-      <span><div class="title">${title}</div><div class="artists">${artists}</div></span>
-      <span class="album">${esc(u.album || '–')}</span>
-      <span class="src"><span class="sw" style="background:${scolor}"></span>${esc(u.source_name || sname)}</span>
-      <span class="time" title="${t ? esc(new Date(t).toLocaleString('zh-CN')) : ''}">${ago(u.updated_at)}</span>
-    </div>`;
-  }).join('');
-  el.querySelectorAll('.urow').forEach(row => {
-    const open = () => openUpload(row.dataset.id);
-    row.addEventListener('click', open);
-    row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  $('#libHint').textContent = `已保存的全部歌词 · 与存储实时同步${lib.total ? ' · 共 ' + fmt(lib.total) + ' 条' : ''}`;
+  const more = lib.rows.length < lib.total;
+  $('#moreWrap').hidden = !more;
+  if (more) $('#moreHint').textContent = `已显示 ${fmt(lib.rows.length)} / ${fmt(lib.total)}`;
+  document.querySelectorAll('.uploads-head .sort').forEach(h => {
+    const on = h.dataset.sort === lib.sort;
+    h.classList.toggle('on', on);
+    h.querySelector('.arrow').textContent = on ? (lib.order === 'desc' ? '↓' : '↑') : '';
   });
 }
 
-function closeDialog() { $('#dlg').hidden = true; state.doc = null; }
-
-function metaChip(k, v) {
-  if (v == null || v === '' || v === false) return '';
-  return `<span class="chip">${esc(k)} <b>${esc(v === true ? '是' : v)}</b></span>`;
-}
-
-async function openUpload(id) {
-  const row = (state.data.uploads || []).find(u => u.id === id) || {};
-  $('#dlgTitle').textContent = row.title || id;
-  $('#dlgSub').textContent = (row.artists || []).join(' / ') + (row.album ? ' · ' + row.album : '');
-  $('#dlgLinks').innerHTML = '';
-  $('#dlgMeta').innerHTML = '';
-  $('#dlgBody').innerHTML = '<div class="dlg-msg">加载中…</div>';
-  $('#dlg').hidden = false;
-  let r;
-  try { r = await fetch('/api/uploads/' + encodeURIComponent(id), { headers: headers(), cache: 'no-store' }); }
-  catch (e) { $('#dlgBody').innerHTML = '<div class="dlg-msg">无法连接服务器：' + esc(e && e.message || e) + '</div>'; return; }
-  if (r.status === 401) { closeDialog(); $('#auth').hidden = false; $('#authErr').textContent = '需要有效令牌'; return; }
-  if (r.status === 403) { $('#dlgBody').innerHTML = '<div class="dlg-msg">服务器未配置 API_TOKEN，无法查看歌词内容。<br><span class="hint">在服务器环境中设置 API_TOKEN 后，此页输入令牌即可查看与下载。</span></div>'; return; }
-  if (r.status === 404) { $('#dlgBody').innerHTML = '<div class="dlg-msg">该绑定已被移除。</div>'; return; }
-  if (!r.ok) { $('#dlgBody').innerHTML = '<div class="dlg-msg">加载失败：HTTP ' + r.status + '</div>'; return; }
-  const doc = (await r.json()).binding || {};
-  state.doc = doc;
-  renderDialog(doc, row);
-}
-
-function renderDialog(doc, row) {
-  const track = doc.track || {};
-  $('#dlgTitle').textContent = track.title || row.title || doc.spotify_uri || '–';
-  $('#dlgSub').textContent = (track.artists || row.artists || []).join(' / ') + ((track.album || row.album) ? ' · ' + (track.album || row.album) : '');
-
-  const links = [];
-  if (doc.spotify_url) links.push(`<a class="btn primary small" href="${esc(doc.spotify_url)}" target="_blank" rel="noopener">${SPOTIFY_ICON}在 Spotify 打开</a>`);
-  if (doc.match && doc.match.url) {
-    const pname = doc.match.provider_name || (SOURCE[doc.match.provider] || [])[0] || '来源平台';
-    links.push(`<a class="btn ghost small" href="${esc(doc.match.url)}" target="_blank" rel="noopener">在${esc(pname)}打开</a>`);
-  }
-  if (doc.lrc) links.push(`<button class="btn ghost small" id="dlLrc">${DL_ICON}下载 LRC</button>`);
-  $('#dlgLinks').innerHTML = links.join('');
-  const dl = $('#dlLrc');
-  if (dl) dl.onclick = () => downloadLrc(doc, track);
-
-  const match = doc.match;
-  $('#dlgMeta').innerHTML = [
-    metaChip('来源', doc.source === 'local' ? '本地上传' : (match && match.provider_name) || (SOURCE[doc.source] || [])[0] || doc.source),
-    metaChip('匹配 ID', match && match.id),
-    metaChip('类型', SYNC[doc.sync_type] || doc.sync_type),
-    metaChip('行数', doc.line_count),
-    metaChip('翻译', doc.translated ? '有' : ''),
-    metaChip('偏移', doc.offset_ms ? doc.offset_ms + ' ms' : ''),
-    metaChip('绑定次数', doc.bind_count),
-    metaChip('上传于', doc.updated_at ? new Date(doc.updated_at).toLocaleString('zh-CN') : ''),
-  ].join('');
-
-  const body = $('#dlgBody');
-  const lines = doc.lyrics && doc.lyrics.lines;
-  if (lines && lines.length) {
-    body.innerHTML = lines.map(l => {
-      let text = l.text || (l.words || []).map(w => w.text).join('');
-      const tl = l.translated_text ? `<div class="tl">${esc(l.translated_text)}</div>` : '';
-      return `<div class="ln">${esc(text) || '&nbsp;'}${tl}</div>`;
-    }).join('');
-  } else if (doc.lrc) {
-    body.innerHTML = '<pre>' + esc(doc.lrc) + '</pre>';
-  } else {
-    body.innerHTML = '<div class="dlg-msg">存储的歌词内容为空。</div>';
-  }
-}
-
-function downloadLrc(doc, track) {
-  const artists = (track.artists || []).join(', ');
-  const name = ((artists ? artists + ' - ' : '') + (track.title || doc.spotify_uri || 'lyrics'))
-    .replace(/[\\/:*?"<>|]/g, '_') + '.lrc';
-  const blob = new Blob([doc.lrc], { type: 'text/plain;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
-}
-
-$('#dlgClose').onclick = closeDialog;
-$('#dlg').addEventListener('click', e => { if (e.target === e.currentTarget) closeDialog(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#dlg').hidden) closeDialog(); });
+$('#more').onclick = () => refreshLibrary(true);
+$('#libQ').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    state.lib.q = e.target.value.trim();
+    state.lib.rows = [];
+    refreshLibrary();
+  }, 300);
+});
+document.querySelectorAll('.uploads-head .sort').forEach(h => {
+  h.addEventListener('click', () => {
+    const lib = state.lib, col = h.dataset.sort;
+    if (lib.sort === col) lib.order = lib.order === 'desc' ? 'asc' : 'desc';
+    else { lib.sort = col; lib.order = (col === 'title' || col === 'artists' || col === 'album') ? 'asc' : 'desc'; }
+    lib.rows = [];
+    refreshLibrary();
+  });
+});
 
 /* ------------------------------------------------------ chart ---- */
 /* Points within the chosen range, downsampled to roughly one per pixel. */

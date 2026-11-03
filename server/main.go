@@ -58,7 +58,11 @@ func Run(env func(string) (string, bool)) error {
 	cfg := loadConfig(env)
 	log.SetFlags(log.LstdFlags | log.LUTC)
 	app := NewApp(cfg, newBucket(cfg, env), nil)
+	defer app.Close()
 	srv := newServer(app)
+	syncCtx, stopSync := context.WithCancel(context.Background())
+	defer stopSync()
+	go app.syncLoop(syncCtx)
 
 	storage, relay := "local directory (no R2 configured)", "off"
 	if app.storage == "r2" {

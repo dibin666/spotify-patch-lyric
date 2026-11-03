@@ -5,7 +5,7 @@
 # pure local mode) as a static binary on an empty image (~10 MB).
 FROM golang:1.24-alpine AS build
 WORKDIR /src
-COPY go.mod *.go VERSION ./
+COPY go.mod go.sum *.go VERSION ./
 COPY server/ ./server/
 COPY cmd/ ./cmd/
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/spot-lyric-server ./cmd/spot-lyric-server \
