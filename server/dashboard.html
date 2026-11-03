@@ -6,97 +6,269 @@
 <meta name="color-scheme" content="dark">
 <title>Spot-Lyric · 服务器状态</title>
 <style>
+  /* Official Spotify web fonts (Encore), same CDN the web player uses. */
+  @font-face {
+    font-family: 'SpotifyMixUI';
+    src: url('https://encore.scdn.co/fonts/SpotifyMixUI-Regular-76c92fb1a35c462f73429fa8865163eb.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'SpotifyMixUI';
+    src: url('https://encore.scdn.co/fonts/SpotifyMixUI-Bold-09c45a3a0ce9d2971e62cb26e97760fb.woff2') format('woff2');
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'SpotifyMixUITitle';
+    src: url('https://encore.scdn.co/fonts/SpotifyMixUITitleVariable-08bab3354d40f74e5177917b5ae80894.woff2') format('woff2');
+    font-weight: 200 900; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'SpotifyMixMono';
+    src: url('https://encore.scdn.co/fonts/SpotifyMixMono-Regular-134eeb986fc0f94a9f0acb9cedaeb584.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+
+  /* Encore design tokens (open.spotify.com). */
   :root {
-    --bg: #0b0e14; --panel: #151a23; --panel2: #1b212d; --border: #262f3e;
-    --text: #e6e9ef; --muted: #8b94a5; --accent: #1db954; --accent2: #1ed760;
+    --font: 'SpotifyMixUI', 'CircularSp', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+    --font-title: 'SpotifyMixUITitle', 'SpotifyMixUI', 'CircularSp', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    --font-mono: 'SpotifyMixMono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+    --background-base: #121212;
+    --background-highlight: #1f1f1f;
+    --background-press: #000000;
+    --background-elevated-base: #1f1f1f;
+    --background-elevated-highlight: #2a2a2a;
+    --background-elevated-press: #191919;
+    --background-tinted-base: rgba(0, 0, 0, .08);
+    --background-tinted-highlight: rgba(0, 0, 0, .05);
+    --essential-base: #ffffff;
+    --essential-subdued: #727272;
+    --essential-bright-accent: #1ed760;
+    --text-base: #ffffff;
+    --text-subdued: #b3b3b3;
+    --text-negative: #f15e6c;
+    --accent: #1ed760;
+    --accent-hover: #3be477;
+    --decorative-subdued: #292929;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { color-scheme: dark; }
   body {
-    background: var(--bg); color: var(--text);
-    font: 14px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-    min-height: 100vh;
+    background: var(--background-base); color: var(--text-base);
+    font-family: var(--font); font-size: 14px; line-height: 1.5;
+    min-height: 100vh; -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 40px; }
-  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
-  h1 { font-size: 20px; font-weight: 700; letter-spacing: .3px; }
-  h1 .dot { color: var(--accent); }
-  .meta { color: var(--muted); font-size: 13px; }
-  .meta code { color: var(--text); background: var(--panel2); border-radius: 4px; padding: 1px 6px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 24px 32px 48px; }
+
+  /* ---- header (Encore topbar feel) ---- */
+  header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 28px; }
+  .logo { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; flex: none; }
+  .logo svg { width: 24px; height: 24px; fill: #000; }
+  h1 {
+    font-family: var(--font-title); font-size: 28px; font-weight: 800;
+    letter-spacing: -.02em; line-height: 1.15;
+  }
+  .chips { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--background-elevated-highlight); color: var(--text-subdued);
+    border-radius: 500px; padding: 5px 12px; font-size: 12px; white-space: nowrap;
+  }
+  .chip b { color: var(--text-base); font-weight: 700; }
+  .chip code { font-family: var(--font-mono); font-size: 12px; color: var(--text-base); }
   .grow { flex: 1; }
-  button {
-    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+
+  /* ---- buttons (Encore) ---- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font-family: var(--font); font-size: 14px; font-weight: 700;
+    border-radius: 500px; border: 0; padding: 8px 24px; min-height: 40px;
+    cursor: pointer; text-decoration: none; user-select: none;
+    transition: transform .1s ease, background-color .1s ease, border-color .1s ease, color .1s ease;
   }
-  button:hover { border-color: var(--accent); }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 14px; }
+  .btn:active { transform: scale(.96); }
+  .btn.primary { background: var(--essential-bright-accent); color: #000; }
+  .btn.primary:hover { background: var(--accent-hover); transform: scale(1.04); }
+  .btn.ghost {
+    background: transparent; color: var(--text-base);
+    border: 1px solid var(--essential-subdued);
+  }
+  .btn.ghost:hover { border-color: var(--essential-base); transform: scale(1.04); }
+  .btn.small { min-height: 32px; padding: 6px 16px; font-size: 13px; }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn.primary svg { fill: #000; }
+  .btn.ghost svg { fill: var(--text-base); }
+
+  /* ---- stat cards ---- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 16px; }
   .card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px;
+    background: var(--background-elevated-base); border-radius: 8px; padding: 20px 22px;
+    transition: background-color .2s ease;
   }
-  .card .num { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; }
-  .card .num.accent { color: var(--accent2); }
-  .card .label { color: var(--text); font-weight: 600; margin-top: 2px; }
-  .card .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .card:hover { background: var(--background-elevated-highlight); }
+  .card .num {
+    font-family: var(--font-title); font-size: 48px; font-weight: 800; line-height: 1.1;
+    font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  }
+  .card .num.accent { color: var(--accent); }
+  .card .label { color: var(--text-base); font-weight: 700; margin-top: 4px; font-size: 15px; }
+  .card .sub { color: var(--text-subdued); font-size: 12px; margin-top: 2px; }
+
+  /* ---- panels ---- */
   .panel {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: 18px 20px; margin-bottom: 14px;
+    background: var(--background-elevated-base); border-radius: 8px;
+    padding: 20px 24px; margin-bottom: 16px;
   }
-  .panel h2 { font-size: 15px; font-weight: 700; }
-  .hint { color: var(--muted); font-weight: 400; font-size: 12px; }
-  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-  .ranges { margin-left: auto; display: flex; gap: 6px; }
-  .ranges button { padding: 4px 10px; border-radius: 6px; font-size: 12px; }
-  .ranges button.on { background: var(--accent); border-color: var(--accent); color: #08130c; font-weight: 700; }
-  .platforms { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+  .panel h2 { font-family: var(--font-title); font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
+  .hint { color: var(--text-subdued); font-weight: 400; font-size: 12px; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .ranges { margin-left: auto; display: flex; gap: 8px; }
+  .ranges .btn { min-height: 32px; padding: 4px 14px; font-size: 12px; }
+  .ranges .btn.on { background: var(--essential-bright-accent); color: #000; border-color: transparent; }
+
+  .platforms { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
   .plat {
-    display: flex; align-items: center; gap: 8px; background: var(--panel2);
-    border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px 6px 10px;
+    display: flex; align-items: center; gap: 8px; background: var(--background-elevated-highlight);
+    border-radius: 500px; padding: 8px 16px 8px 12px;
   }
   .plat .sw { width: 10px; height: 10px; border-radius: 50%; }
   .plat b { font-variant-numeric: tabular-nums; }
-  .plat .name { color: var(--muted); }
-  .plat .pct { color: var(--muted); font-size: 12px; }
+  .plat .name { color: var(--text-subdued); }
+  .plat .pct { color: var(--text-subdued); font-size: 12px; }
+
   .chartwrap { position: relative; }
   canvas { width: 100%; height: 320px; display: block; }
   .tip {
-    position: absolute; pointer-events: none; background: rgba(10, 14, 20, .95);
-    border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px;
-    font-size: 12px; white-space: nowrap; z-index: 5; box-shadow: 0 6px 20px rgba(0,0,0,.5);
+    position: absolute; pointer-events: none; background: var(--background-elevated-highlight);
+    border-radius: 8px; padding: 10px 14px; font-size: 12px; white-space: nowrap; z-index: 5;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
   }
-  .tip .t { color: var(--muted); margin-bottom: 4px; }
+  .tip .t { color: var(--text-subdued); margin-bottom: 4px; }
   .tip .u { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
   .tip .p { display: flex; gap: 6px; align-items: center; }
   .tip .sw { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; color: var(--muted); font-size: 12px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; color: var(--text-subdued); font-size: 12px; }
   .legend .sw { width: 9px; height: 9px; border-radius: 2px; display: inline-block; margin-right: 5px; }
-  footer { color: var(--muted); font-size: 12px; margin-top: 18px; line-height: 1.7; }
-  .empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+
+  /* ---- uploads: Spotify playlist-style track list ---- */
+  .uploads-head, .urow {
+    display: grid; grid-template-columns: 20px minmax(0, 5fr) minmax(0, 3fr) 120px 110px;
+    gap: 16px; align-items: center; padding: 0 16px;
+  }
+  .uploads-head {
+    height: 36px; border-bottom: 1px solid rgba(255, 255, 255, .1); margin-bottom: 8px;
+    color: var(--text-subdued); font-size: 12px; font-weight: 700;
+    letter-spacing: .1em; text-transform: uppercase;
+  }
+  .uploads-head .r { text-align: right; }
+  .urow {
+    height: 56px; border-radius: 6px; cursor: pointer; position: relative;
+    transition: background-color .15s ease;
+  }
+  .urow:hover { background: rgba(255, 255, 255, .1); }
+  .urow .idx { color: var(--text-subdued); font-variant-numeric: tabular-nums; text-align: right; }
+  .urow .title {
+    color: var(--text-base); font-size: 15px; font-weight: 400;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .urow .artists {
+    color: var(--text-subdued); font-size: 13px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .urow:hover .title { text-decoration: underline; }
+  .urow .album {
+    color: var(--text-subdued); font-size: 14px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .urow .src { display: flex; align-items: center; gap: 7px; color: var(--text-subdued); font-size: 13px; white-space: nowrap; overflow: hidden; }
+  .urow .src .sw { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .urow .time { color: var(--text-subdued); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+  .uempty { padding: 40px 0; text-align: center; color: var(--text-subdued); font-size: 14px; }
+  @media (max-width: 760px) {
+    .uploads-head .album, .urow .album { display: none; }
+    .uploads-head, .urow { grid-template-columns: 20px minmax(0, 5fr) 120px 110px; }
+  }
+
+  /* ---- dialog (Encore modal) ---- */
+  .dlg-wrap {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, .7); z-index: 20;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .dlg-wrap[hidden] { display: none; }
+  .dialog {
+    background: var(--background-elevated-highlight); border-radius: 8px;
+    width: 720px; max-width: 100%; max-height: 86vh; display: flex; flex-direction: column;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, .6); overflow: hidden;
+  }
+  .dlg-head {
+    display: flex; align-items: flex-start; gap: 12px; padding: 24px 24px 0;
+  }
+  .dlg-head .tt { flex: 1; min-width: 0; }
+  .dlg-head h3 {
+    font-family: var(--font-title); font-size: 22px; font-weight: 800; letter-spacing: -.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .dlg-head .sub { color: var(--text-subdued); font-size: 14px; margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dlg-x {
+    flex: none; width: 32px; height: 32px; border: 0; border-radius: 50%; cursor: pointer;
+    background: rgba(0, 0, 0, .3); color: var(--text-subdued); font-size: 15px; line-height: 1;
+    display: grid; place-items: center;
+  }
+  .dlg-x:hover { color: var(--text-base); transform: scale(1.06); }
+  .dlg-links { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px 24px 0; }
+  .dlg-meta { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 24px 0; }
+  .lyrics-scroll {
+    margin: 16px 24px 24px; padding: 18px 20px; overflow-y: auto;
+    background: var(--background-tinted-base); border-radius: 8px; min-height: 120px;
+  }
+  .lyrics-scroll .ln { padding: 3px 0; font-size: 15px; line-height: 1.7; }
+  .lyrics-scroll .ln .tl { color: var(--text-subdued); font-size: 13px; }
+  .lyrics-scroll pre {
+    font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65;
+    color: var(--text-subdued); white-space: pre-wrap; word-break: break-all;
+  }
+  .dlg-msg { padding: 40px 24px; text-align: center; color: var(--text-subdued); }
+
+  footer { color: var(--text-subdued); font-size: 12px; margin-top: 20px; line-height: 1.7; }
+  .empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-subdued); }
+
+  /* ---- auth dialog ---- */
   .auth {
-    position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex;
-    align-items: center; justify-content: center; z-index: 10;
+    position: fixed; inset: 0; background: rgba(0, 0, 0, .7); display: flex;
+    align-items: center; justify-content: center; z-index: 30;
   }
   .auth[hidden] { display: none; }
-  .auth .box { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 26px; width: 340px; }
-  .auth h3 { font-size: 16px; margin-bottom: 8px; }
-  .auth p { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .auth .box { background: var(--background-elevated-highlight); border-radius: 8px; padding: 32px; width: 360px; }
+  .auth h3 { font-family: var(--font-title); font-size: 20px; font-weight: 800; margin-bottom: 10px; }
+  .auth p { color: var(--text-subdued); font-size: 13px; margin-bottom: 18px; }
   .auth input {
-    width: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
-    color: var(--text); padding: 9px 12px; font-size: 14px; margin-bottom: 12px; outline: none;
+    width: 100%; background: var(--background-tinted-base); border: 1px solid var(--essential-subdued);
+    border-radius: 4px; color: var(--text-base); padding: 12px 14px; font-size: 14px;
+    font-family: var(--font); margin-bottom: 14px; outline: none;
   }
-  .auth input:focus { border-color: var(--accent); }
-  .auth button { width: 100%; background: var(--accent); border-color: var(--accent); color: #08130c; font-weight: 700; padding: 9px; }
-  .err { color: #f2736d; font-size: 12px; margin-bottom: 10px; min-height: 16px; }
-  .fatal { text-align: center; color: var(--muted); padding: 80px 20px; }
-  .fatal b { color: var(--text); display: block; font-size: 17px; margin-bottom: 8px; }
+  .auth input:hover { border-color: var(--text-base); }
+  .auth input:focus { border-color: var(--essential-base); }
+  .auth .btn { width: 100%; }
+  .err { color: var(--text-negative); font-size: 12px; margin-bottom: 10px; min-height: 16px; }
+  .fatal { text-align: center; color: var(--text-subdued); padding: 100px 20px; }
+  .fatal b { color: var(--text-base); display: block; font-size: 18px; margin-bottom: 8px; }
 </style>
 </head>
 <body>
 <div class="wrap" id="app" hidden>
   <header>
-    <h1>Spot-Lyric <span class="dot">●</span> 服务器状态</h1>
-    <span class="meta">版本 <code id="version">–</code> · 存储 <code id="storage">–</code></span>
+    <span class="logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 1.5C6.2 1.5 1.5 6.2 1.5 12S6.2 22.5 12 22.5 22.5 17.8 22.5 12 17.8 1.5 12 1.5zm4.8 15.2c-.2.3-.6.4-.9.2-2.5-1.5-5.6-1.9-9.3-1-.3.1-.7-.1-.8-.4-.1-.3.1-.7.4-.8 4-1 7.4-.6 10.2 1.1.3.2.4.6.4.9zm1.3-2.9c-.2.4-.7.5-1 .3-2.9-1.7-7.2-2.3-10.6-1.3-.4.1-.8-.1-.9-.5-.1-.4.1-.8.5-.9 3.8-1.1 8.5-.6 11.8 1.4.3.2.5.7.2 1zm.1-3c-3.4-2-9.1-2.2-12.4-1.2-.5.1-1-.1-1.1-.6-.1-.5.1-1 .6-1.1 3.7-1.1 10-.9 13.9 1.4.4.3.6.8.3 1.2-.3.4-.8.5-1.3.3z"/></svg>
+    </span>
+    <h1>Spot-Lyric 服务器状态</h1>
+    <div class="chips">
+      <span class="chip">版本 <code id="version">–</code></span>
+      <span class="chip">存储 <code id="storage">–</code></span>
+      <span class="chip" id="updated"></span>
+    </div>
     <span class="grow"></span>
-    <span class="meta" id="updated"></span>
-    <button id="refresh">刷新</button>
+    <button class="btn primary small" id="refresh">刷新</button>
   </header>
 
   <section class="cards">
@@ -115,10 +287,10 @@
     <div class="row">
       <h2>活跃用户变化</h2>
       <div class="ranges">
-        <button data-r="60">1 小时</button>
-        <button data-r="360">6 小时</button>
-        <button data-r="1440" class="on">24 小时</button>
-        <button data-r="0">全部</button>
+        <button class="btn ghost" data-r="60">1 小时</button>
+        <button class="btn ghost" data-r="360">6 小时</button>
+        <button class="btn ghost on" data-r="1440">24 小时</button>
+        <button class="btn ghost" data-r="0">全部</button>
       </div>
     </div>
     <div class="chartwrap">
@@ -128,11 +300,37 @@
     <div class="legend" id="legend"></div>
   </section>
 
+  <section class="panel">
+    <div class="row">
+      <h2>最近上传</h2>
+      <span class="hint">用户点击上传到服务器的歌词 · 点击查看内容</span>
+    </div>
+    <div class="uploads-head">
+      <span class="r">#</span><span>歌曲</span><span class="album">专辑</span><span>来源</span><span class="r">上传时间</span>
+    </div>
+    <div id="uploads"></div>
+  </section>
+
   <footer>
     用户按客户端地址统计，仅保留加盐哈希、全部在内存中（重启清零），接口本身不产生记录。
     同一地址的多个客户端计为一个用户；窗口内无请求即视为离开。
     每 30 秒自动刷新。
   </footer>
+</div>
+
+<div class="dlg-wrap" id="dlg" hidden>
+  <div class="dialog" role="dialog" aria-modal="true">
+    <div class="dlg-head">
+      <div class="tt">
+        <h3 id="dlgTitle">–</h3>
+        <div class="sub" id="dlgSub">–</div>
+      </div>
+      <button class="dlg-x" id="dlgClose" aria-label="关闭">✕</button>
+    </div>
+    <div class="dlg-links" id="dlgLinks"></div>
+    <div class="dlg-meta" id="dlgMeta"></div>
+    <div class="lyrics-scroll" id="dlgBody"><div class="dlg-msg">加载中…</div></div>
+  </div>
 </div>
 
 <div class="fatal" id="fatal" hidden></div>
@@ -143,7 +341,7 @@
     <p>该服务器配置了 API_TOKEN，请输入令牌查看统计（保存在当前会话中）。</p>
     <div class="err" id="authErr"></div>
     <input id="token" type="password" placeholder="API 令牌" autocomplete="off">
-    <button id="login">查看统计</button>
+    <button class="btn primary" id="login">查看统计</button>
   </div>
 </div>
 
@@ -156,8 +354,16 @@ const PLATFORM = {
   android: ['Android', '#7bd88a'], ios: ['iOS', '#e8e8f0'], service: ['脚本/服务', '#9d7ff0'],
   other: ['其他', '#64748b'],
 };
+const SOURCE = {
+  netease: ['网易云音乐', '#ec4141'], qq: ['QQ 音乐', '#31c27c'],
+  local: ['本地上传', '#b3b3b3'], spotify: ['Spotify', '#1ed760'],
+};
+const SYNC = { word: '逐字歌词', line: '逐行歌词', unsynced: '无时间轴' };
+const SPOTIFY_ICON = '<svg viewBox="0 0 24 24"><path d="M12 1.5C6.2 1.5 1.5 6.2 1.5 12S6.2 22.5 12 22.5 22.5 17.8 22.5 12 17.8 1.5 12 1.5zm4.8 15.2c-.2.3-.6.4-.9.2-2.5-1.5-5.6-1.9-9.3-1-.3.1-.7-.1-.8-.4-.1-.3.1-.7.4-.8 4-1 7.4-.6 10.2 1.1.3.2.4.6.4.9zm1.3-2.9c-.2.4-.7.5-1 .3-2.9-1.7-7.2-2.3-10.6-1.3-.4.1-.8-.1-.9-.5-.1-.4.1-.8.5-.9 3.8-1.1 8.5-.6 11.8 1.4.3.2.5.7.2 1zm.1-3c-3.4-2-9.1-2.2-12.4-1.2-.5.1-1-.1-1.1-.6-.1-.5.1-1 .6-1.1 3.7-1.1 10-.9 13.9 1.4.4.3.6.8.3 1.2-.3.4-.8.5-1.3.3z"/></svg>';
+const DL_ICON = '<svg viewBox="0 0 24 24"><path d="M12 3a1 1 0 0 1 1 1v8.6l3.3-3.3a1 1 0 0 1 1.4 1.4l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.4L11 12.6V4a1 1 0 0 1 1-1zM4 19a1 1 0 0 1 1-1h14a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1z"/></svg>';
 const fmt = n => (n == null ? '–' : Number(n).toLocaleString('zh-CN'));
-const state = { data: null, range: 1440, pts: [], geo: null };
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const state = { data: null, range: 1440, pts: [], geo: null, doc: null };
 let refreshTimer = null;
 
 function fail(html) {
@@ -167,19 +373,34 @@ function fail(html) {
   f.innerHTML = html;
 }
 
-async function load() {
-  const headers = {};
+function headers() {
+  const h = {};
   const token = sessionStorage.getItem('sl_token');
-  if (token) headers.Authorization = 'Bearer ' + token;
+  if (token) h.Authorization = 'Bearer ' + token;
+  return h;
+}
+
+async function load() {
   let r;
-  try { r = await fetch('/api/stats', { headers, cache: 'no-store' }); }
+  try { r = await fetch('/api/stats', { headers: headers(), cache: 'no-store' }); }
   catch (e) { return fail('<b>无法连接服务器</b>' + (e && e.message || e)); }
-  if (r.status === 401) { $('#auth').hidden = false; $('#authErr').textContent = token ? '令牌无效，请重新输入' : ''; return; }
+  if (r.status === 401) { $('#auth').hidden = false; $('#authErr').textContent = sessionStorage.getItem('sl_token') ? '令牌无效，请重新输入' : ''; return; }
   if (r.status === 404) return fail('<b>服务器未开启统计</b>该服务器的 STATS 被设为 0，或版本不含此功能。');
   if (!r.ok) return fail('<b>统计接口错误</b>HTTP ' + r.status);
   $('#auth').hidden = true;
   state.data = await r.json();
   render();
+}
+
+function ago(iso) {
+  const t = Date.parse(iso);
+  if (!t) return '–';
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 60) return '刚刚';
+  if (s < 3600) return Math.floor(s / 60) + ' 分钟前';
+  if (s < 86400) return Math.floor(s / 3600) + ' 小时前';
+  if (s < 86400 * 30) return Math.floor(s / 86400) + ' 天前';
+  return new Date(t).toLocaleDateString('zh-CN');
 }
 
 function render() {
@@ -207,12 +428,128 @@ function render() {
     el.insertAdjacentHTML('beforeend',
       `<div class="plat"><span class="sw" style="background:${color}"></span><span class="name">${name}</span><b>${fmt(n)}</b><span class="pct">${Math.round(n / total * 100)}%</span></div>`);
   }
+  renderUploads(d.uploads || []);
   draw(-1);
   $('#updated').textContent = '更新于 ' + new Date(d.now * 1000).toLocaleTimeString('zh-CN');
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(load, 30000);
 }
 
+/* ------------------------------------------------ recent uploads ---- */
+function renderUploads(list) {
+  const el = $('#uploads');
+  if (!list.length) {
+    el.innerHTML = '<div class="uempty">还没有上传记录<br><span class="hint">用户在客户端点「使用此歌词」或上传按钮后会出现在这里</span></div>';
+    return;
+  }
+  el.innerHTML = list.map((u, i) => {
+    const [sname, scolor] = SOURCE[u.source] || [u.source_name || u.source || '–', '#727272'];
+    const title = esc(u.title || u.id);
+    const artists = esc((u.artists || []).join(' / ') || '–');
+    const t = Date.parse(u.updated_at);
+    return `<div class="urow" data-id="${esc(u.id)}" role="button" tabindex="0">
+      <span class="idx">${i + 1}</span>
+      <span><div class="title">${title}</div><div class="artists">${artists}</div></span>
+      <span class="album">${esc(u.album || '–')}</span>
+      <span class="src"><span class="sw" style="background:${scolor}"></span>${esc(u.source_name || sname)}</span>
+      <span class="time" title="${t ? esc(new Date(t).toLocaleString('zh-CN')) : ''}">${ago(u.updated_at)}</span>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.urow').forEach(row => {
+    const open = () => openUpload(row.dataset.id);
+    row.addEventListener('click', open);
+    row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  });
+}
+
+function closeDialog() { $('#dlg').hidden = true; state.doc = null; }
+
+function metaChip(k, v) {
+  if (v == null || v === '' || v === false) return '';
+  return `<span class="chip">${esc(k)} <b>${esc(v === true ? '是' : v)}</b></span>`;
+}
+
+async function openUpload(id) {
+  const row = (state.data.uploads || []).find(u => u.id === id) || {};
+  $('#dlgTitle').textContent = row.title || id;
+  $('#dlgSub').textContent = (row.artists || []).join(' / ') + (row.album ? ' · ' + row.album : '');
+  $('#dlgLinks').innerHTML = '';
+  $('#dlgMeta').innerHTML = '';
+  $('#dlgBody').innerHTML = '<div class="dlg-msg">加载中…</div>';
+  $('#dlg').hidden = false;
+  let r;
+  try { r = await fetch('/api/uploads/' + encodeURIComponent(id), { headers: headers(), cache: 'no-store' }); }
+  catch (e) { $('#dlgBody').innerHTML = '<div class="dlg-msg">无法连接服务器：' + esc(e && e.message || e) + '</div>'; return; }
+  if (r.status === 401) { closeDialog(); $('#auth').hidden = false; $('#authErr').textContent = '需要有效令牌'; return; }
+  if (r.status === 403) { $('#dlgBody').innerHTML = '<div class="dlg-msg">服务器未配置 API_TOKEN，无法查看歌词内容。<br><span class="hint">在服务器环境中设置 API_TOKEN 后，此页输入令牌即可查看与下载。</span></div>'; return; }
+  if (r.status === 404) { $('#dlgBody').innerHTML = '<div class="dlg-msg">该绑定已被移除。</div>'; return; }
+  if (!r.ok) { $('#dlgBody').innerHTML = '<div class="dlg-msg">加载失败：HTTP ' + r.status + '</div>'; return; }
+  const doc = (await r.json()).binding || {};
+  state.doc = doc;
+  renderDialog(doc, row);
+}
+
+function renderDialog(doc, row) {
+  const track = doc.track || {};
+  $('#dlgTitle').textContent = track.title || row.title || doc.spotify_uri || '–';
+  $('#dlgSub').textContent = (track.artists || row.artists || []).join(' / ') + ((track.album || row.album) ? ' · ' + (track.album || row.album) : '');
+
+  const links = [];
+  if (doc.spotify_url) links.push(`<a class="btn primary small" href="${esc(doc.spotify_url)}" target="_blank" rel="noopener">${SPOTIFY_ICON}在 Spotify 打开</a>`);
+  if (doc.match && doc.match.url) {
+    const pname = doc.match.provider_name || (SOURCE[doc.match.provider] || [])[0] || '来源平台';
+    links.push(`<a class="btn ghost small" href="${esc(doc.match.url)}" target="_blank" rel="noopener">在${esc(pname)}打开</a>`);
+  }
+  if (doc.lrc) links.push(`<button class="btn ghost small" id="dlLrc">${DL_ICON}下载 LRC</button>`);
+  $('#dlgLinks').innerHTML = links.join('');
+  const dl = $('#dlLrc');
+  if (dl) dl.onclick = () => downloadLrc(doc, track);
+
+  const match = doc.match;
+  $('#dlgMeta').innerHTML = [
+    metaChip('来源', doc.source === 'local' ? '本地上传' : (match && match.provider_name) || (SOURCE[doc.source] || [])[0] || doc.source),
+    metaChip('匹配 ID', match && match.id),
+    metaChip('类型', SYNC[doc.sync_type] || doc.sync_type),
+    metaChip('行数', doc.line_count),
+    metaChip('翻译', doc.translated ? '有' : ''),
+    metaChip('偏移', doc.offset_ms ? doc.offset_ms + ' ms' : ''),
+    metaChip('绑定次数', doc.bind_count),
+    metaChip('上传于', doc.updated_at ? new Date(doc.updated_at).toLocaleString('zh-CN') : ''),
+  ].join('');
+
+  const body = $('#dlgBody');
+  const lines = doc.lyrics && doc.lyrics.lines;
+  if (lines && lines.length) {
+    body.innerHTML = lines.map(l => {
+      let text = l.text || (l.words || []).map(w => w.text).join('');
+      const tl = l.translated_text ? `<div class="tl">${esc(l.translated_text)}</div>` : '';
+      return `<div class="ln">${esc(text) || '&nbsp;'}${tl}</div>`;
+    }).join('');
+  } else if (doc.lrc) {
+    body.innerHTML = '<pre>' + esc(doc.lrc) + '</pre>';
+  } else {
+    body.innerHTML = '<div class="dlg-msg">存储的歌词内容为空。</div>';
+  }
+}
+
+function downloadLrc(doc, track) {
+  const artists = (track.artists || []).join(', ');
+  const name = ((artists ? artists + ' - ' : '') + (track.title || doc.spotify_uri || 'lyrics'))
+    .replace(/[\\/:*?"<>|]/g, '_') + '.lrc';
+  const blob = new Blob([doc.lrc], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+
+$('#dlgClose').onclick = closeDialog;
+$('#dlg').addEventListener('click', e => { if (e.target === e.currentTarget) closeDialog(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#dlg').hidden) closeDialog(); });
+
+/* ------------------------------------------------------ chart ---- */
 /* Points within the chosen range, downsampled to roughly one per pixel. */
 function points() {
   const all = (state.data && state.data.series) || [];
@@ -253,7 +590,7 @@ function draw(hover) {
   state.geo = { pad, iw, maxY };
 
   /* grid + y labels */
-  ctx.font = '11px sans-serif'; ctx.fillStyle = '#8b94a5'; ctx.strokeStyle = '#232b38';
+  ctx.font = '11px SpotifyMixUI, sans-serif'; ctx.fillStyle = '#b3b3b3'; ctx.strokeStyle = 'rgba(255,255,255,.1)';
   ctx.lineWidth = 1; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
   for (let v = 0; v <= maxY; v += step) {
     const yy = y(v);
@@ -277,7 +614,7 @@ function draw(hover) {
   legend.innerHTML = '<span class="sw" style="background:#1ed760;border-radius:50%"></span>活跃用户合计&nbsp;&nbsp;' +
     present.map(k => `<span><span class="sw" style="background:${PLATFORM[k][1]}"></span>${PLATFORM[k][0]}</span>`).join(' ');
   if (!pts.length || pts.every(p => !p.users)) {
-    ctx.fillStyle = '#8b94a5'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '13px sans-serif';
+    ctx.fillStyle = '#b3b3b3'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '13px SpotifyMixUI, sans-serif';
     ctx.fillText('暂无活跃用户数据，等待客户端接入', pad.l + iw / 2, pad.t + ih / 2);
     return;
   }
@@ -304,7 +641,7 @@ function draw(hover) {
   }
   /* hover crosshair */
   if (hover >= 0 && hover < pts.length) {
-    ctx.strokeStyle = 'rgba(230,233,239,.35)'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
     ctx.beginPath(); ctx.moveTo(x(hover), pad.t); ctx.lineTo(x(hover), pad.t + ih); ctx.stroke();
     ctx.setLineDash([]);
     ctx.beginPath(); ctx.arc(x(hover), y(pts[hover].users), 3.5, 0, 7); ctx.fillStyle = '#1ed760'; ctx.fill();
@@ -330,8 +667,8 @@ $('#chart').addEventListener('mousemove', e => {
   tip.style.top = Math.max(4, e.clientY - rect.top - tip.offsetHeight - 10) + 'px';
 });
 $('#chart').addEventListener('mouseleave', () => { $('#tip').hidden = true; draw(-1); });
-document.querySelectorAll('.ranges button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('.ranges button').forEach(x => x.classList.remove('on'));
+document.querySelectorAll('.ranges .btn').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.ranges .btn').forEach(x => x.classList.remove('on'));
   b.classList.add('on');
   state.range = +b.dataset.r;
   draw(-1);

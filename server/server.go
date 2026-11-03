@@ -330,6 +330,9 @@ func (a *App) bind(ctx context.Context, body obj) (any, error) {
 			resultErr = a.saveError(id, err)
 			return
 		}
+		if a.stats != nil {
+			a.stats.recordUpload(doc)
+		}
 		result = obj{"stored": a.storage, "updated_at": now, "binding": publicDoc(saved)}
 	})
 	return result, resultErr
@@ -349,6 +352,10 @@ func (a *App) unbind(ctx context.Context, body obj) (any, error) {
 		if err := a.bindings.Remove(ctx, id); err != nil {
 			log.Printf("[storage] delete %s %v", id, err)
 			resultErr = &HTTPError{502, "从存储删除失败：" + err.Error()}
+			return
+		}
+		if a.stats != nil {
+			a.stats.removeUpload(id)
 		}
 	})
 	if resultErr != nil {
@@ -367,6 +374,22 @@ func (a *App) binding(ctx context.Context, id string) (any, error) {
 		return nil, &HTTPError{404, "not bound"}
 	}
 	return obj{"binding": publicDoc(doc)}, nil
+}
+
+/* The full stored document (including the LRC copy) for the dashboard's lyric
+ * viewer. Requires API_TOKEN so the public API keeps never serving lyric text. */
+func (a *App) uploadDoc(ctx context.Context, id string) (any, error) {
+	if a.cfg.Token == "" {
+		return nil, &HTTPError{403, "查看歌词内容需要服务器配置 API_TOKEN"}
+	}
+	doc, err := a.bindings.Get(ctx, id)
+	if err != nil {
+		return nil, &HTTPError{502, err.Error()}
+	}
+	if doc == nil {
+		return nil, &HTTPError{404, "not bound"}
+	}
+	return obj{"binding": doc}, nil
 }
 
 /* Forwards one provider request built by the client (allow-listed, not interpreted). */
@@ -483,6 +506,7 @@ func readBody(w http.ResponseWriter, r *http.Request) (obj, error) {
 }
 
 var bindingPathRe = regexp.MustCompile(`^/api/bindings/([A-Za-z0-9]{22})$`)
+var uploadPathRe = regexp.MustCompile(`^/api/uploads/([A-Za-z0-9]{22})$`)
 
 /* Matching moved to the client in v1.2: tell old clients to update. */
 var retired = map[string]bool{"/api/match": true, "/api/search": true, "/api/lyrics": true}
@@ -525,7 +549,7 @@ func (a *App) route(w http.ResponseWriter, r *http.Request, send func(int, any),
 		return nil
 	}
 	if r.Method == "GET" && path == "/" {
-		info := obj{"name": "spot-lyric-server", "version": version, "docs": "GET /api/bindings/<spotify-track-id> | POST /api/bind | /api/unbind | /api/relay"}
+		info := obj{"name": "spot-lyric-server", "version": version, "docs": "GET /api/bindings/<spotify-track-id> | POST /api/bind | /api/unbind | /api/relay | GET /api/uploads/<spotify-track-id>"}
 		if a.stats != nil {
 			info["dashboard"] = "/dashboard"
 		}
@@ -572,6 +596,14 @@ func (a *App) route(w http.ResponseWriter, r *http.Request, send func(int, any),
 	}
 	if m := bindingPathRe.FindStringSubmatch(path); r.Method == "GET" && m != nil {
 		out, err := a.binding(r.Context(), m[1])
+		if err != nil {
+			return err
+		}
+		send(200, out)
+		return nil
+	}
+	if m := uploadPathRe.FindStringSubmatch(path); r.Method == "GET" && m != nil {
+		out, err := a.uploadDoc(r.Context(), m[1])
 		if err != nil {
 			return err
 		}
