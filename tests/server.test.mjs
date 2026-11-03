@@ -144,13 +144,16 @@ test('"使用此歌词" binds on this machine only; the upload button shares it;
   assert.equal(doc.bind_count, 2);
   assert.equal(doc.lyrics.lines[0].text, '第二个版本');
 
-  // Another client (empty local cache) gets the stored lyrics without any provider request.
+  // Another client (empty local cache) gets the stored lyrics; the update check asks
+  // the bound platform once whether its copy is still current (it is — nothing offered).
   const local = [];
   const other = client(s.base, { local });
   await other.setTrack(SUNNY);
   assert.equal(other.status, '云端歌词 · 网易云音乐');
   assert.equal(other.lyrics.lines[0].text, '第二个版本');
-  assert.equal(local.length, 0, 'served from the server');
+  await other.updateCheck;
+  assert.equal(other.remoteUpdate, null, 'platform copy is still the stored one');
+  assert.equal(local.length, 1, 'only the background update check asked the provider');
   const marked = (await other.search('晴天 周杰伦')).providers[0].candidates.filter(c => c.bound).map(c => c.id);
   assert.deepEqual(marked, [second.id]);
   const info = await (await fetch(`${s.base}/api/bindings/0RiRZpuVRbi7oqRdSMwhQY`)).json();
@@ -246,6 +249,47 @@ test('track offset: stays local until uploaded, then travels with the lyrics', a
   assert.equal((await post('/api/bind', { track: SUNNY, offset_ms: 99999, lyrics: core.parseLrc('[00:01.00]x', null, 'local') })).status, 200);
   assert.equal(JSON.parse(s.bucket.objects.get(KEY).body).offset_ms, 5000);
   assert.equal((await post('/api/offset', { track: SUNNY, offset_ms: 1 })).status, 404, 'no separate offset endpoint');
+});
+
+test('cloud lyrics: a newer copy on the bound platform is offered and applied', async (t) => {
+  const s = await start(); t.after(s.close);
+  const original = LYRICS[7];
+  t.after(() => { LYRICS[7] = original; });
+  const engine = client(s.base);
+  await engine.setTrack(SUNNY);
+  await engine.upload();
+  assert.equal(engine.remoteState(), 'same');
+  assert.equal(engine.remoteUpdate, null, 'nothing newer on the platform yet');
+  /* The provider corrects its copy afterwards; the stored (cached) binding is the old one. */
+  LYRICS[7] = lrc(['改过的第一行', '改过的第二行', '改过的第三行']);
+  await engine.setTrack(null);
+  await engine.setTrack(SUNNY);
+  assert.equal(engine.origin, 'cloud');
+  await engine.updateCheck;
+  assert.ok(engine.remoteUpdate, 'the platform update is offered');
+  assert.equal(engine.remoteUpdate.lyrics.lines[0].text, '改过的第一行');
+  assert.equal(engine.remoteUpdate.match.id, '7');
+  assert.equal(engine.lyrics.lines[0].text, '故事的小黄花', 'screen unchanged until applied');
+  /* Applying takes the newer copy on screen and onto the server. */
+  await engine.applyRemoteUpdate();
+  assert.equal(engine.remoteUpdate, null);
+  assert.equal(engine.lyrics.lines[0].text, '改过的第一行');
+  assert.equal(engine.remoteState(), 'same');
+  const doc = JSON.parse(s.bucket.objects.get(KEY).body);
+  assert.equal(doc.lyrics.lines[0].text, '改过的第一行');
+  assert.equal(doc.match.id, '7');
+  assert.equal(doc.bind_count, 2);
+  /* The same check within the hour is skipped… */
+  await engine.setTrack(null);
+  await engine.setTrack(SUNNY);
+  await engine.updateCheck;
+  assert.equal(engine.remoteUpdate, null);
+  /* …and a forced re-check finds the stored copy up to date: nothing offered. */
+  await engine.store.cacheRemove('update-check:' + core.trackKey(SUNNY));
+  await engine.setTrack(null);
+  await engine.setTrack(SUNNY);
+  await engine.updateCheck;
+  assert.equal(engine.remoteUpdate, null);
 });
 
 test('prefetch: upcoming tracks are matched in the background; playing them needs no request', async (t) => {

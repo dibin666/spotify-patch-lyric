@@ -704,6 +704,9 @@
         this.pending = setTimeout(() => { this.pending = 0; if (!this.button.isConnected || !this.inPlace()) this.attach(); }, 250);
       });
       this.observer.observe(document.body, { childList: true, subtree: true });
+      /* The platform-lyric update bubble follows the upload button on window resizes. */
+      this.updateBubble = null; this._dismissedUpdate = null;
+      addEventListener('resize', () => this.placeUpdateBubble());
     }
     inPlace() {
       const official = document.querySelector('[data-testid="lyrics-button"]');
@@ -734,12 +737,16 @@
       if (this.app.updater) this.app.updater.place();
       /* Pure local mode has no server to upload to. */
       this.uploadButton.hidden = pureLocal();
-      const blocked = !!this.uploadBlocked(), saved = !blocked && this.app.engine.remoteState() === 'same';
+      const engine = this.app.engine, update = engine.remoteUpdate;
+      this.uploadButton.dataset.update = String(!!update);
+      const blocked = !!this.uploadBlocked(), saved = !blocked && engine.remoteState() === 'same';
       this.uploadButton.dataset.state = this.uploading ? 'busy' : blocked ? 'off' : saved ? 'saved' : 'ready';
       this.uploadButton.setAttribute('aria-disabled', String(blocked));
       if (this.uploadIconState !== saved) { this.uploadIconState = saved; this.uploadIcon.replaceChildren(svg(saved ? ICON.uploaded : ICON.upload)); }
       this.uploadButton.setAttribute('aria-label', this.uploadHint());
       if (this.tipOwner === this.uploadButton) this.tooltip(this.uploadButton, this.uploadHint());
+      /* The platform-lyric update bubble pops above the upload button (once per offer). */
+      if (update && update !== this._dismissedUpdate && !this.uploading) this.showUpdateBubble(update); else this.removeUpdateBubble();
     }
     uploadBlocked() {
       const engine = this.app.engine, lyrics = engine.lyrics, track = engine.track;
@@ -754,7 +761,9 @@
       if (this.uploading) return this.uploading === 'check' ? '正在检查服务器…' : '正在上传…';
       const blocked = this.uploadBlocked();
       if (blocked) return blocked;
-      const engine = this.app.engine, source = NAMES[engine.lyrics.source] || engine.lyrics.source;
+      const engine = this.app.engine, update = engine.remoteUpdate;
+      if (update) return `${NAMES[(update.match && update.match.provider)] || '绑定平台'}的歌词有更新，点击更新服务器上的歌词`;
+      const source = NAMES[engine.lyrics.source] || engine.lyrics.source;
       return ({
         same: `服务器上已是当前歌词和偏移（${source}）`,
         offset: '偏移已修改，点击上传到服务器',
@@ -764,9 +773,12 @@
     /* The server is asked first: lyrics someone already stored are only replaced after a confirmation. */
     async upload() {
       if (this.uploading) return;
+      const engine = this.app.engine;
+      /* The bound provider song has newer lyrics than the server's copy: updating takes precedence. */
+      if (engine.remoteUpdate) { this.applyUpdate(); return; }
       const blocked = this.uploadBlocked();
       if (blocked) { toast(blocked); return; }
-      const engine = this.app.engine, track = engine.track;
+      const track = engine.track;
       this.uploading = 'check'; this.refresh();
       try {
         let existing;
@@ -787,6 +799,64 @@
         toast(existing ? '已覆盖服务器上的歌词和偏移' : '已上传当前歌词和偏移到歌词服务器');
       } catch (e) { toast('上传失败：' + (e.message || e)); }
       finally { this.uploading = false; this.refresh(); }
+    }
+    /* The bound provider song's newer lyrics: after a confirmation they go on screen
+     * and onto the server in one step (the normal upload path keeps match + offset). */
+    async applyUpdate() {
+      const engine = this.app.engine, update = engine.remoteUpdate;
+      if (!update || this.uploading) return;
+      const name = NAMES[(update.match && update.match.provider)] || '绑定平台';
+      const kind = s => ({ word: '逐字同步', line: '逐行同步', unsynced: '未同步' })[s] || '';
+      const info = lyrics => lyrics ? `${lyrics.lines.length} 行${kind(lyrics.sync_type) ? ' · ' + kind(lyrics.sync_type) : ''}${lyrics.lines.some(l => l.translated_text) ? ' · 含译文' : ''}` : '';
+      const doc = engine.remote;
+      const ok = await confirmDialog({
+        title: `${name}的歌词有更新`,
+        body: [
+          doc && doc.lyrics ? `服务器上的歌词：${info(doc.lyrics)}` : null,
+          `最新歌词：${info(update.lyrics)}`,
+          '要用最新歌词替换当前显示，并更新到服务器吗？',
+        ],
+        confirm: '更新',
+      });
+      if (!ok) return;
+      this.removeUpdateBubble();
+      this.uploading = 'upload'; this.refresh();
+      try {
+        if (!(await engine.applyRemoteUpdate())) return;
+        toast('已更新服务器上的歌词');
+      } catch (e) { toast('更新失败：' + (e.message || e)); }
+      finally { this.uploading = false; this.refresh(); }
+    }
+    /* Bubble above the upload button, its arrow on the button's centre (same shape as the
+     * version bubble above the entry button). Closed bubbles stay closed for that offer. */
+    showUpdateBubble(update) {
+      if (!this.updateBubble) {
+        this.updateBubbleText = h('span', { class: 'sl-bubble-text' });
+        this.updateBubble = h('div', { class: 'sl-bubble', role: 'status', 'data-testid': 'spot-lyric-lyric-update' },
+          h('button', { type: 'button', class: 'sl-bubble-main', onclick: () => this.applyUpdate() },
+            h('span', { class: 'sl-bubble-dot', 'aria-hidden': 'true' }), this.updateBubbleText, h('span', { class: 'sl-bubble-link' }, '更新')),
+          h('button', { type: 'button', class: 'sl-bubble-close', 'aria-label': '关闭', title: '关闭（上传按钮上的小绿点会保留）', onclick: () => this.dismissUpdateBubble() }, svg(ICON.close, 12)));
+      }
+      this.updateBubbleText.textContent = `${NAMES[(update.match && update.match.provider)] || '绑定平台'}的歌词有更新`;
+      document.body.append(this.updateBubble);
+      this.placeUpdateBubble();
+    }
+    dismissUpdateBubble() {
+      this._dismissedUpdate = this.app.engine.remoteUpdate;
+      this.removeUpdateBubble();
+    }
+    removeUpdateBubble() { if (this.updateBubble) this.updateBubble.remove(); }
+    placeUpdateBubble() {
+      const bubble = this.updateBubble;
+      if (!bubble || !bubble.isConnected) return;
+      const r = this.uploadButton.isConnected ? this.uploadButton.getBoundingClientRect() : null;
+      if (!r || !r.width) { bubble.style.visibility = 'hidden'; return; }
+      bubble.style.visibility = '';
+      const b = bubble.getBoundingClientRect(), center = r.left + r.width / 2;
+      const left = clamp(center - b.width / 2, 8, innerWidth - b.width - 8);
+      bubble.style.left = `${Math.round(left)}px`;
+      bubble.style.top = `${Math.round(r.top - b.height - 12)}px`;
+      bubble.style.setProperty('--sl-arrow', `${Math.round(center - left)}px`);
     }
     tooltip(owner, text) {
       this.tipOwner = owner;

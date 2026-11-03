@@ -215,6 +215,46 @@
   footer { color: var(--text-subdued); font-size: 12px; margin-top: 20px; line-height: 1.7; }
   .empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-subdued); }
 
+  /* ---- lyric quick view: small window over the list (no page jump) ---- */
+  .lrc-modal {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, .7); z-index: 40;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .lrc-modal[hidden] { display: none; }
+  .lrc-card {
+    display: flex; flex-direction: column; width: min(640px, 100%); max-height: min(84vh, 760px);
+    background: var(--background-elevated-base); border-radius: 12px; overflow: hidden;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, .5);
+  }
+  .lrc-head { display: flex; align-items: flex-start; gap: 14px; padding: 20px 20px 0 24px; }
+  .lrc-head .meta { flex: 1; min-width: 0; }
+  .lrc-head .kicker { color: var(--text-subdued); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .lrc-head h3 { font-family: var(--font-title); font-size: 22px; font-weight: 800; letter-spacing: -.01em; line-height: 1.25; overflow-wrap: anywhere; }
+  .lrc-head .sub { color: var(--text-subdued); font-size: 13px; margin-top: 2px; }
+  .lrc-close {
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+    background: var(--background-tinted-base); color: var(--text-subdued);
+  }
+  .lrc-close:hover { background: var(--background-elevated-highlight); color: var(--text-base); }
+  .lrc-close svg { width: 14px; height: 14px; fill: currentColor; }
+  .lrc-card .chips { padding: 10px 24px 0; margin-bottom: 10px; }
+  .lrc-body {
+    flex: 1; min-height: 140px; overflow-y: auto; padding: 6px 24px 18px;
+    scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .3) transparent;
+  }
+  .lrc-body .ln { padding: 4px 0; font-size: 15px; line-height: 1.7; }
+  .lrc-body .tl { color: var(--text-subdued); font-size: 13px; line-height: 1.6; }
+  .lrc-body pre {
+    font-family: var(--font-mono); font-size: 12px; line-height: 1.7;
+    color: var(--text-subdued); white-space: pre-wrap; word-break: break-all;
+  }
+  .lrc-body .msg { padding: 40px 16px; text-align: center; color: var(--text-subdued); }
+  .lrc-body .msg b { color: var(--text-base); display: block; font-size: 15px; margin-bottom: 4px; }
+  .lrc-foot { display: flex; align-items: center; gap: 10px; padding: 0 24px 20px; }
+  .lrc-foot .grow { flex: 1; }
+  .btn[hidden] { display: none; }
+
   /* ---- auth dialog ---- */
   .auth {
     position: fixed; inset: 0; background: rgba(0, 0, 0, .7); display: flex;
@@ -311,6 +351,27 @@
 
 <div class="fatal" id="fatal" hidden></div>
 
+<div class="lrc-modal" id="lrcModal" hidden>
+  <div class="lrc-card" role="dialog" aria-modal="true" aria-labelledby="lrcTitle">
+    <div class="lrc-head">
+      <div class="meta">
+        <div class="kicker">已保存歌词</div>
+        <h3 id="lrcTitle">–</h3>
+        <div class="sub" id="lrcSub"></div>
+      </div>
+      <button class="lrc-close" id="lrcClose" aria-label="关闭" title="关闭"><svg viewBox="0 0 24 24"><path d="M6.7 5.3a1 1 0 0 0-1.4 1.4L10.6 12l-5.3 5.3a1 1 0 1 0 1.4 1.4L12 13.4l5.3 5.3a1 1 0 0 0 1.4-1.4L13.4 12l5.3-5.3a1 1 0 0 0-1.4-1.4L12 10.6z"/></svg></button>
+    </div>
+    <div class="chips" id="lrcMeta"></div>
+    <div class="lrc-body" id="lrcBody"><div class="msg">加载中…</div></div>
+    <div class="lrc-foot">
+      <a class="btn ghost small" id="lrcFull" href="/lyrics" target="_blank" rel="noopener">在新页面打开</a>
+      <a class="btn ghost small" id="lrcSrc" href="#" target="_blank" rel="noopener" hidden>在来源平台打开</a>
+      <span class="grow"></span>
+      <button class="btn ghost small" id="lrcDl" hidden>下载 LRC</button>
+    </div>
+  </div>
+</div>
+
 <div class="auth" id="auth" hidden>
   <div class="box">
     <h3>需要访问令牌</h3>
@@ -334,7 +395,10 @@ const SOURCE = {
   netease: ['网易云音乐', '#ec4141'], qq: ['QQ 音乐', '#31c27c'],
   local: ['本地上传', '#b3b3b3'], spotify: ['Spotify', '#1ed760'],
 };
+const SYNC = { word: '逐字歌词', line: '逐行歌词', unsynced: '无时间轴' };
 const fmt = n => (n == null ? '–' : Number(n).toLocaleString('zh-CN'));
+const fmtTime = ms => { const s = Math.round(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+const metaChip = (k, v) => (v == null || v === '' || v === false) ? '' : `<span class="chip">${esc(k)} <b>${esc(v === true ? '是' : v)}</b></span>`;
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const state = {
   data: null, range: 1440, pts: [], geo: null,
@@ -444,7 +508,7 @@ function renderLibrary() {
     el.innerHTML = lib.rows.map((u, i) => {
       const [sname, scolor] = SOURCE[u.source] || [u.source_name || u.source || '–', '#727272'];
       const t = Date.parse(u.updated_at);
-      return `<a class="urow" href="/lyrics?id=${encodeURIComponent(u.id)}" title="点击查看歌词内容">
+      return `<a class="urow" href="/lyrics?id=${encodeURIComponent(u.id)}" data-id="${esc(u.id)}" title="点击查看歌词内容">
         <span class="idx">${i + 1}</span>
         <span><div class="title">${esc(u.title || u.id)}</div><div class="artists">${esc((u.artists || []).join(' / ') || '–')}</div></span>
         <span class="album">${esc(u.album || '–')}</span>
@@ -466,6 +530,104 @@ function renderLibrary() {
 }
 
 $('#more').onclick = () => refreshLibrary(true);
+
+/* ------------------------------------------------ lyric quick view ---- */
+/* A row opens the lyric in a small window on this page; middle / modified clicks
+ * still take the full /lyrics page in a new tab. */
+const lrcModal = $('#lrcModal');
+let lrcDoc = null, lrcSeq = 0;
+const lrcMsg = html => { $('#lrcBody').innerHTML = '<div class="msg">' + html + '</div>'; };
+
+$('#uploads').addEventListener('click', e => {
+  const a = e.target.closest('a.urow');
+  if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  openLyric(a.dataset.id);
+});
+
+async function openLyric(id) {
+  const seq = ++lrcSeq;
+  lrcModal.hidden = false;
+  document.body.style.overflow = 'hidden';
+  lrcDoc = null;
+  $('#lrcTitle').textContent = '加载中…';
+  $('#lrcSub').textContent = ''; $('#lrcMeta').innerHTML = '';
+  lrcMsg('加载中…');
+  $('#lrcFull').href = '/lyrics?id=' + encodeURIComponent(id);
+  $('#lrcDl').hidden = true;
+  $('#lrcSrc').hidden = true;
+  let r;
+  try { r = await fetch('/api/uploads/' + encodeURIComponent(id), { headers: headers(), cache: 'no-store' }); }
+  catch (e) { if (seq === lrcSeq) lrcMsg('<b>无法连接服务器</b>' + esc(e && e.message || e)); return; }
+  if (seq !== lrcSeq) return;
+  if (r.status === 401) {
+    closeLyric();
+    $('#auth').hidden = false;
+    $('#authErr').textContent = sessionStorage.getItem('sl_token') ? '令牌无效，请重新输入' : '';
+    return;
+  }
+  if (r.status === 404) return lrcMsg('<b>歌词不存在</b>该绑定已被移除，或从未上传过。');
+  if (!r.ok) return lrcMsg('<b>加载失败</b>HTTP ' + r.status);
+  const doc = (await r.json()).binding || {};
+  if (seq !== lrcSeq) return;
+  lrcDoc = doc;
+  const track = doc.track || {};
+  $('#lrcTitle').textContent = track.title || doc.spotify_uri || id;
+  $('#lrcSub').textContent = [(track.artists || []).join(' / '), track.album, track.duration_ms ? fmtTime(track.duration_ms) : ''].filter(Boolean).join(' · ');
+  const match = doc.match;
+  $('#lrcMeta').innerHTML = [
+    metaChip('来源', doc.source === 'local' ? '本地上传' : (match && match.provider_name) || (SOURCE[doc.source] || [])[0] || doc.source),
+    metaChip('类型', SYNC[doc.sync_type] || doc.sync_type),
+    metaChip('行数', doc.line_count),
+    metaChip('翻译', doc.translated ? '有' : ''),
+    metaChip('偏移', doc.offset_ms ? doc.offset_ms + ' ms' : ''),
+    metaChip('上传于', doc.updated_at ? new Date(doc.updated_at).toLocaleString('zh-CN') : ''),
+  ].join('');
+  const lines = doc.lyrics && doc.lyrics.lines;
+  if (lines && lines.length) {
+    $('#lrcBody').innerHTML = lines.map(l => {
+      const text = l.text || (l.words || []).map(w => w.text).join('');
+      const tl = l.translated_text ? `<div class="tl">${esc(l.translated_text)}</div>` : '';
+      return `<div class="ln">${esc(text) || '&nbsp;'}${tl}</div>`;
+    }).join('');
+  } else if (doc.lrc) {
+    $('#lrcBody').innerHTML = '<pre>' + esc(doc.lrc) + '</pre>';
+  } else {
+    lrcMsg('存储的歌词内容为空。');
+  }
+  $('#lrcDl').hidden = !doc.lrc;
+  if (match && match.url) {
+    const src = $('#lrcSrc');
+    src.hidden = false;
+    src.href = match.url;
+    src.textContent = `在${(match.provider_name || (SOURCE[match.provider] || [])[0] || '来源平台')}打开`;
+  }
+}
+
+function closeLyric() {
+  if (lrcModal.hidden) return;
+  lrcSeq++;
+  lrcModal.hidden = true;
+  document.body.style.overflow = '';
+}
+$('#lrcClose').onclick = closeLyric;
+lrcModal.addEventListener('mousedown', e => { if (e.target === lrcModal) closeLyric(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLyric(); });
+$('#lrcDl').onclick = () => { if (lrcDoc) downloadLrc(lrcDoc); };
+
+function downloadLrc(doc) {
+  const track = doc.track || {};
+  const artists = (track.artists || []).join(', ');
+  const name = ((artists ? artists + ' - ' : '') + (track.title || doc.spotify_uri || 'lyrics'))
+    .replace(/[\\/:*?"<>|]/g, '_') + '.lrc';
+  const blob = new Blob([doc.lrc], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
 $('#libQ').addEventListener('input', e => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {

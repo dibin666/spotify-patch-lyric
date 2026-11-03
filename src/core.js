@@ -531,6 +531,16 @@
     const pad = (n, w) => String(n).padStart(w, '0');
     return left + pad(Math.floor(time / 60000), 2) + ':' + pad(Math.floor(time / 1000) % 60, 2) + '.' + pad(time % 1000, 3) + right;
   }
+  /* Canonical fingerprint of a lyrics body: text, translation and all timings — any
+   * upstream correction (typo fix, added translation, retimed words) changes it. */
+  function lyricsDigest(lyrics) {
+    const lines = (lyrics && lyrics.lines) || [];
+    return cyrb53(JSON.stringify([
+      (lyrics && lyrics.sync_type) || '',
+      lines.map(l => [l.text || '', l.translated_text || '', l.start_time_ms | 0, l.end_time_ms | 0,
+        (l.words || []).map(w => [w.text || '', w.start_time_ms | 0, w.end_time_ms | 0])]),
+    ]));
+  }
   function exportLrc(lyrics) {
     let text = '';
     for (const line of (lyrics && lyrics.lines) || []) {
@@ -871,10 +881,15 @@
       this.prefetching = new Map(); this.prefetched = new Map(); this.upcoming = []; this.prefetchActive = false;
       /* The lyrics server's copy for the playing track: undefined unknown, null none, or the binding. */
       this.remote = undefined;
+      /* The bound provider song's newer copy when the server's stored lyrics fell behind
+       * (offered at the upload button), and the running background check for it. */
+      this.remoteUpdate = null; this.updateCheck = null;
     }
     _changed() { try { this.deps.onChange && this.deps.onChange(); } catch (e) { console.error('[spot-lyric]', e); } }
     _setStatus(text) { this.status = text; this._changed(); }
     _install(lyrics, colors, match, origin) {
+      /* A manual choice or a new track supersedes a pending platform update. */
+      if (this.remoteUpdate && lyrics !== this.remoteUpdate.lyrics) this.remoteUpdate = null;
       this.lyrics = lyrics ? JSON.parse(JSON.stringify(lyrics)) : null;
       this.colors = colors || null;
       this.match = lyrics && match ? candidateFromJson(candidateJson(match)) : null;
@@ -940,10 +955,16 @@
         return candidates;
       } catch (e) { await this._failure(provider, e); throw e; }
     }
-    async providerFetch(candidate, signal, budget) {
+    /* fresh skips the (permanent) lyrics cache and asks the provider for its current
+     * copy — the update check uses it; the failure cooldown still applies. */
+    async providerFetch(candidate, signal, budget, fresh) {
       const key = `${LYRICS_CACHE}:${candidate.provider}:${candidate.id}`;
-      const cached = await this._cached(key, candidate.provider);
-      if (cached !== undefined) return cached;
+      if (fresh) {
+        if (await this.store.cacheGet('failure:' + candidate.provider) != null) throw new ProviderError('来源暂不可用，稍后自动重试', 'blocked');
+      } else {
+        const cached = await this._cached(key, candidate.provider);
+        if (cached !== undefined) return cached;
+      }
       try {
         const requests = fetchRequests(candidate);
         let raw;
@@ -954,11 +975,12 @@
         let lyrics;
         if (raw === null) {
           lyrics = parseLrc('', null, candidate.provider);
-          await this.store.cachePut(key, JSON.stringify(lyrics), 21600);
+          if (!fresh) await this.store.cachePut(key, JSON.stringify(lyrics), 21600);
           return lyrics;
         }
         lyrics = lyricsFromResponse(candidate.provider, raw);
-        await this.store.cachePut(key, JSON.stringify(lyrics), lyricsUsable(lyrics) ? 0 : 21600);
+        /* A fresh check never erases a cached good copy with a temporary "no lyrics". */
+        if (!fresh || lyricsUsable(lyrics)) await this.store.cachePut(key, JSON.stringify(lyrics), lyricsUsable(lyrics) ? 0 : 21600);
         return lyrics;
       } catch (e) { await this._failure(candidate.provider, e); throw e; }
     }
@@ -995,6 +1017,7 @@
       this.track = track ? JSON.parse(JSON.stringify(track)) : null;
       this._install(null);
       this.remote = this.cloud && track && spotifyId(track.uri) ? undefined : null;
+      this.remoteUpdate = null;
       if (!track || !track.title) { this._setStatus('等待播放器'); return; }
       const controller = this.controller = new AbortController();
       const current = () => generation === this.generation && !controller.signal.aborted;
@@ -1054,7 +1077,10 @@
           const lyrics = await this._cloudLyrics(track, doc, signal); check();
           const name = PROVIDER_NAMES[(doc.match && doc.match.provider) || doc.source] || '';
           ui.install(lyrics, null, candidateFromJson(doc.match), 'cloud');
-          ui.status(`云端歌词${name ? ' · ' + name : ''}`); return;
+          ui.status(`云端歌词${name ? ' · ' + name : ''}`);
+          /* The bound provider song may have newer lyrics than the stored copy: check. */
+          if (visible) this.updateCheck = this._checkCloudUpdate(track, doc, signal, current);
+          return;
         }
       }
       if (visible && !remoteKnown) this._learnRemote(track, signal, current);
@@ -1267,6 +1293,34 @@
         return { stored: answer.stored || 'server', updated_at: answer.updated_at || '', binding: answer.binding || null };
       } catch (e) { return { error: e.message || String(e) }; }
     }
+    /* The stored binding came from a provider song whose lyrics may have been corrected
+     * since they were uploaded. Once an hour per track the provider is asked for its
+     * current copy; a difference is offered at the upload button (remoteUpdate). */
+    async _checkCloudUpdate(track, doc, signal, current) {
+      try {
+        const match = candidateFromJson(doc.match);
+        if (!match || !lyricsUsable(doc.lyrics)) return;
+        const key = 'update-check:' + trackKey(track);
+        if (await this.store.cacheGet(key) != null) return;
+        const fresh = await this.providerFetch(match, signal, { remaining: 2 }, true);
+        await this.store.cachePut(key, '1', 3600);
+        if (!current() || !lyricsUsable(fresh) || lyricsDigest(fresh) === lyricsDigest(doc.lyrics)) return;
+        this.remoteUpdate = { lyrics: fresh, match };
+        this._changed();
+      } catch (e) { /* a failed check simply offers nothing */ }
+    }
+    /* Takes the platform's newer copy offered by remoteUpdate: it goes on screen and,
+     * through the normal upload path, onto the server (bound match + track offset). */
+    async applyRemoteUpdate() {
+      const update = this.remoteUpdate;
+      if (!update || !this.track) return false;
+      this.remoteUpdate = null;
+      this._install(update.lyrics, null, update.match, 'cloud');
+      const name = PROVIDER_NAMES[update.match.provider] || update.match.provider;
+      this._setStatus(`云端歌词已更新 · ${name}`);
+      await this.upload();
+      return true;
+    }
     /* The server copy of the playing track, learnt in the background when the lyrics on
      * screen did not come from it (for the upload button's state). */
     _learnRemote(track, signal, current) {
@@ -1298,7 +1352,7 @@
       if (result.error) throw new ProviderError(result.error, 'failed');
       if (this.track === track) {
         this.store.set(OFFSET_KEY + trackKey(track), String(offset));
-        this.remote = result.binding || null; this.origin = 'cloud'; this._changed();
+        this.remote = result.binding || null; this.origin = 'cloud'; this.remoteUpdate = null; this._changed();
       }
       return result;
     }
@@ -1470,7 +1524,7 @@
     DURATION_TOLERANCE, PROVIDERS, PROVIDER_NAMES, normalize, toSimplified, textSimilarity, versionFlags, titleBase, titleCore, titleSimilarity,
     artistSimilarity, artistNames, durationDelta, durationScore, matchScore, matchSort, matchSelect, searchQueries, scriptsDiffer,
     trackKey, spotifyId, trackEqual, trackPayload, romanize, lyricsSimilarity,
-    candidateFromJson, candidateJson, parseLrc, spotifyLyrics, lyricsUsable, lyricsIndex, exportLrc, sanitizeLyrics,
+    candidateFromJson, candidateJson, parseLrc, spotifyLyrics, lyricsUsable, lyricsIndex, exportLrc, sanitizeLyrics, lyricsDigest,
     providerCandidates, searchRequest, fetchRequest, fetchRequests, parseProviderBody, lyricsFromResponse, decodeLyric,
     parseYrc, finalizeLyrics, emptyLyrics, PARSER_VERSION,
     ProviderError, Http, Engine, Cloud,

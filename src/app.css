@@ -27,6 +27,12 @@
 .sl-upload[data-state="off"]:hover { color: var(--text-subdued, #b3b3b3); transform: none; }
 .sl-upload[data-state="saved"] { color: var(--text-bright-accent, #1ed760); opacity: .9; }
 .sl-upload[data-state="busy"] { cursor: progress; animation: sl-pulse 1s infinite ease-in-out; }
+/* A newer copy exists on the bound provider: green button with a dot (the bubble above it offers the update). */
+.sl-upload[data-update="true"] { color: var(--text-bright-accent, #1ed760); opacity: 1; }
+.sl-upload[data-update="true"]::before {
+  content: ""; position: absolute; top: 4px; right: 1px; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-bright-accent, #1ed760); box-shadow: 0 0 0 2px var(--background-base, #121212); pointer-events: none;
+}
 @keyframes sl-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 .sl-tooltip {
   position: fixed; z-index: 9999; pointer-events: none; box-sizing: border-box; width: max-content; max-width: 320px;
