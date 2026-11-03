@@ -86,16 +86,8 @@ jobs:
       - if: needs.changes.outputs.scripts == 'true'
         run: bash tests/install_test.sh
 
-  # The patch scripts on their own systems: macOS with its bash 3.2, Windows PowerShell 5.1.
-  patch-macos:
-    needs: changes
-    if: needs.changes.outputs.scripts == 'true'
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: bash tests/patch_test.sh
-        env: { BASH_BIN: /bin/bash, PWSH: '' }
-      - run: /bin/bash tests/install_test.sh
+  # The patch scripts on their own system: Windows PowerShell 5.1 (the macOS job sat in
+  # the runner queue for minutes while running ~1 min, and every release had to wait for it).
   patch-windows:
     needs: changes
     if: needs.changes.outputs.scripts == 'true'
@@ -143,14 +135,14 @@ jobs:
   # plugin-only pushes (which would otherwise overwrite the published binaries mid-version).
   # Only for pushes to main / tags with new binaries, never for pull requests.
   release:
-    needs: [changes, binaries, patch-macos, patch-windows]
+    needs: [changes, binaries, patch-windows]
     # A branch push and its tag push start parallel runs: without this group their
     # release jobs race creating/uploading the same release and one of them fails.
     concurrency: spot-lyric-release
     if: >-
       ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.version == 'true'
       && needs.binaries.result == 'success'
-      && needs.patch-macos.result != 'failure' && needs.patch-windows.result != 'failure' }}
+      && needs.patch-windows.result != 'failure' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
