@@ -350,7 +350,7 @@
     return { text, words };
   }
   /* Bumped whenever parsing changes, so lyrics stored by an older parser get re-fetched. */
-  const PARSER_VERSION = 2;
+  const PARSER_VERSION = 3;
   function emptyLyrics(source) { return { source, provider: source, sync_type: 'line', lines: [], parser: PARSER_VERSION }; }
   function parseLrc(lrc, translation, source) {
     const result = emptyLyrics(source);
@@ -397,7 +397,9 @@
     return result;
   }
   function mergeTranslation(lines, translation, source) {
-    const translated = parseLrc(translation, null, source).lines.filter(l => l.text.trim() && l.text.trim() !== '//');
+    /* ytlrc may itself be word-timed ([start,dur](wordStart,wordDur,0)…) rather than LRC. */
+    const parsed = /^\s*\[\d+,\d+\]/m.test(translation || '') ? parseYrc(translation, null, source) : parseLrc(translation, null, source);
+    const translated = parsed.lines.filter(l => l.text.trim() && l.text.trim() !== '//');
     /* Blank/interlude lines must not swallow a translation meant for a real line. */
     const targets = [];
     lines.forEach((line, i) => { if (line.text.trim()) targets.push(i); });
@@ -425,6 +427,35 @@
       }
       if (best < 0 || bestDiff > TOLERANCE) continue;
       lines[free[best]].translated_text = t.text; from = best + 1;
+    }
+  }
+  /* Lyric lines compared without word spacing, ruby glosses (輝(またた)いて) or
+   * punctuation — yrc words and lrc text tokenize the same line differently. */
+  function lyricKey(text) {
+    return (text || '').replace(/[（(][^（）()]*[)）]/g, '')
+      .replace(/[\s　]+/g, '')
+      .replace(/[!！?？。、，,．.・…~～ー\-—'’'"“”‘’♪♡♥]/g, '');
+  }
+  /* ytlrc is sometimes an auto-aligned subset of tlyric (short interjections dropped),
+   * so preferring it discards real translations. Recover them by bridging through the
+   * line-timed lrc, which shares tlyric's timeline: each still-untranslated line is
+   * matched to the lrc line with the same text — immune to yrc/tlyric timestamp drift. */
+  function mergeTranslationByText(lines, lrc, tlyric, source) {
+    if (!tlyric || !tlyric.trim() || !lrc || !lrc.trim()) return;
+    const ref = parseLrc(lrc, tlyric, source).lines.filter(l => lyricKey(l.text));
+    if (!ref.length) return;
+    let cursor = 0;
+    for (const line of lines) {
+      if (line.translated_text) continue;
+      const k = lyricKey(line.text);
+      if (!k) continue;
+      /* Lines align ~1:1 in order; a window keeps repeated/failed lines from derailing. */
+      for (let j = cursor; j < ref.length && j < cursor + 15; j++) {
+        if (lyricKey(ref[j].text) !== k) continue;
+        if (ref[j].translated_text) line.translated_text = ref[j].translated_text;
+        cursor = j + 1;
+        break;
+      }
     }
   }
   function spotifyLyrics(response) {
@@ -748,9 +779,10 @@
     if (at(raw, 'uncollected') === true) return finalizeLyrics(emptyLyrics('netease'), 'uncollected');
     if (at(raw, 'nolyric') === true) return finalizeLyrics(emptyLyrics('netease'), 'instrumental');
     const lrc = dropJsonLines(str(raw, 'lrc/lyric')), tlyric = dropJsonLines(str(raw, 'tlyric/lyric'));
-    const yrc = dropJsonLines(str(raw, 'yrc/lyric'));
-    let lyrics = yrc.trim() ? parseYrc(yrc, dropJsonLines(str(raw, 'ytlrc/lyric')) || tlyric, 'netease') : null;
+    const yrc = dropJsonLines(str(raw, 'yrc/lyric')), ytlrc = dropJsonLines(str(raw, 'ytlrc/lyric'));
+    let lyrics = yrc.trim() ? parseYrc(yrc, ytlrc || tlyric, 'netease') : null;
     if (!lyricsUsable(lyrics)) lyrics = parseLrc(lrc, tlyric, 'netease');
+    else mergeTranslationByText(lyrics.lines, lrc, tlyric, 'netease');
     /* v1 sends credits as JSON lines; if nothing else remains it is a credits-only placeholder. */
     const creditsOnly = !lyricsUsable(lyrics) && /^\s*\{/m.test(str(raw, 'lrc/lyric') + str(raw, 'yrc/lyric'));
     return finalizeLyrics(lyrics, creditsOnly ? 'credits' : undefined);

@@ -164,6 +164,26 @@ test('provider lyric responses: yrc, placeholders, QQ "no lyric" codes', () => {
   assert.match(core.fetchRequests({ provider: 'netease', id: '9' })[0].url, /\/api\/song\/lyric\/v1\?id=9/);
 });
 
+test('NetEase ytlrc subset: missing translations recovered via lrc text bridge', () => {
+  /* スターダストメドレー: ytlrc is an auto-aligned subset of tlyric — the lrc shares
+   * tlyric's timeline, so still-untranslated yrc lines match it by text. */
+  const partial = { code: 200,
+    lrc: { lyric: '[00:10.00]さあ！空へかかげよう\n[00:20.00]きらきら　きらきら\n' },
+    tlyric: { lyric: '[00:10.00]来！挂在天上吧\n[00:20.00]闪亮 闪亮\n' },
+    yrc: { lyric: '[10500,2000](10500,500,0)さあ(11000,1000,0)空へかかげよう\n[20500,2000](20500,2000,0)きらきらきらきら\n' },
+    ytlrc: { lyric: '[00:20.50]闪亮 闪亮\n' } };
+  const pl = core.lyricsFromResponse('netease', partial);
+  assert.equal(pl.lines.length, 2);
+  assert.equal(pl.lines[0].translated_text, '来！挂在天上吧');
+  assert.equal(pl.lines[1].translated_text, '闪亮 闪亮');
+  /* A word-timed ytlrc ([start,dur](wordStart,wordDur,0)…) is parsed as yrc too. */
+  const wordTlrc = { code: 200,
+    lrc: { lyric: '[00:10.00]さあ空へかかげよう\n' }, tlyric: { lyric: '' },
+    yrc: { lyric: '[10500,2000](10500,2000,0)さあ空へかかげよう\n' },
+    ytlrc: { lyric: '[10500,2000](10500,2000,0)来挂在天上吧\n' } };
+  assert.equal(core.lyricsFromResponse('netease', wordTlrc).lines[0].translated_text, '来挂在天上吧');
+});
+
 test('kana titles match their romaji spelling; QQ translated-title notes are ignored', () => {
   assert.equal(core.romanize('ぎゅって'), 'gyutte');
   assert.equal(core.romanize('シャルル'), 'sharuru');
