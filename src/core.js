@@ -20,11 +20,15 @@
   const PROVIDER_NAMES = { netease: '网易云音乐', qq: 'QQ 音乐', spotify: 'Spotify', local: '本地文件' };
 
   /* ------------------------------------------------------------ text ---- */
-  /* Traditional -> Simplified for the common (GB2312 level-1) characters, from
-   * OpenCC's TSCharacters: Spotify often ships Taiwanese / HK metadata
-   * (「周杰倫」「說好的幸福呢」) while NetEase / QQ use simplified Chinese. */
-  const T2S_FROM = "丟並乾亂亞佈佔併來侖侶侷係俠俬倆倉個們倖倫偉側偵偽傑傘備傢傭傳債傷傾僅僑僕僞僥僱價儀儁億儈儉儘償優儲兇兌兒內兩冊冪凈凍凜凱別刪則剋剎剛剝剮創剷劃劄劇劉劊劍劑勁動務勛勝勞勢勳勵勸勻匯區協卹卻卽厠厤厭厲參叄叢吳吶呂員唸問啓啞啟喚喪喫喬單喲嗆嗎嗚嘆嘔嘗嘩嘯噁噓噴噸噹嚇嚐嚙嚥嚨嚮嚴囂囌囑囪國圍園圓圖團垻埰執堅堯報場塊塗塢塵塹墊墜墮墰墳墻墾壇壓壘壜壞壟壩壯壺壽夠夢夥夾奧奪奬奮妝姦娛婁婦媽嬌嬰嬸孃孫學孿宮寀寢實寧審寫寬寵寶將專尋對導屆屍屜屢層屬岡峯島峽崑崗崙嵗嶄嶺嶼嶽巋巒巖帥師帳帶幀幟幣幫幷幹幾庫廁廂廄廈廕廚廟廠廢廣廬廳弔張強彆彈彌彎彔彙彥彫彿後徑從復徵徹恆恥悅悶悽惡惱愛慄態慘慚慣慫慮慶慼慾憂憊憐憑憚憤憫憲憶懇應懞懲懶懷懸懼懾戀戰戲戶扞拋拚挾捨捱捲掃掄掙掛採揀揚換揮損搖搗搧搶摟摯摳摺摻撈撐撓撣撥撫撲撻撾撿擁擄擇擊擋擔據擠擡擣擬擯擰擱擲擴擺擻擾攆攏攔攙攜攝攢攣攤攪攬敎敗敘敵數斂斃斬斷於旂旣昇時晉晝暈暢暫曆曉曏曠曬書會朮東枴柵柺査桿條棄棊棗棟棧棲楊楓業極榘榦榮構槍槓槳樁樂樑樓標樞樣樸樹橋機橢橫檔檢檯檸檻櫃櫥櫻欄權欽歎歐歡歲歷歸殘殭殲殺殻殼毀毆氈氣氫氾汎汙決沒沖況泝洩洶涼淒淚淨淩淪淵淺渙減渦測渾湊湧湯準溝溫溼滄滅滌滙滬滯滲滷滾滿漁漚漢漣漬漲漸漿潑潔潛潤潰澀澆澇澗澤澱濁濃濕濘濛濟濤濫濰濱濺濾瀉瀋瀕瀝瀰瀾灑灕灘灣灤災為烏烴無煉煙煥煩熒熱熾燈燒燙營燦燬燭燴燻燼爍爐爛爭爲爺爾牀牆牴牽犢犧狀狹狽猙猶獃獄獅獎獨獰獲獵獸獺獻現琱琺瑣瑤瑩瑪環瓊甕產産畝畢畫異畵當疇疊痙痠瘋瘍瘓瘡瘧療癒癟癡癢癥癬癰癱發皁皚皺盃盜盞盡監盤盧盪眞眾睏睜瞞矇矚矯硃硯碩確碼磚礎礙礦礫礬祕祿禍禦禮禱禿稅稈稜種稱穀積穎穢穩穫窩窪窮窯窺竄竅竈竊竪競筆筍箇箋箚節範築篩簍簑簡簽簾籃籌籠籤籬籮籲粵糞糧糰糾紀約紅紉紋納紐純紗紙級紛紡紮細紳紹終絃組絆結絕絛絞絡絢給絨統絲絶絹綁綉綏綑經綜綠綢綫維綱網綳綴綵綸綻綽綿緊緑緒緘線緝緞締緣編緩緬緯練緻縛縣縧縫縮縱縴縷總績繃織繕繞繡繩繪繫繭繳繹繼續纍纏纓纔纖纜缽罈罎罰罵罷羅羣羨義習翫翹聖聞聯聰聲聳聶職聽聾肅脅脈脣脩脫脹腎腦腫腳腸膚膠膩膽膿臉臍臘臟臥臨臺與興舉舊舖舘艙艦艱艷茲荊莊莖莢華菸萊萬葉葦葯葷蒐蒼蓆蓋蓮蔔蔘蔣蔥蔭蕩蕪蕭薊薑薔薦薩薹藍藝藥藴藹蘆蘇蘊蘋蘭蘿處虛虜號虧蛻蝕蝦蝨蝸螞螢蟄蟬蟲蟻蠅蠍蠟蠱蠶蠻衆衊術衕衚衛衝袷裏補裝裡製複褲襖襪襬襯襲覈見規覓視親覺覽觀觸訂訃計訊討訓訖託記訛訝訟訣訪設許訴診註証詐評詛詞詠詢詣試詩詫詭話該詳誅誇誌認誕誘語誠誡誣誤誦誨說説誰課誹誼調諄談請諒論諜諧諮諱諷諸諺諾謀謂謄謅謊謎謗謙講謝謠謡謬謹謾譁證譏識譚譜譟譭譯議譴護譽讀變讒讓讕讚谿豈豎豐豔豬貍貓貝貞負財貢貧貨販貪貫責貯貳貴貶買貸費貼貿賀賂賃賄資賈賊賒賓賜賞賠賢賣賤賦質賬賭賴賺購賽贅贈贊贍贏贓贖贛贜趕趙趨跡踐踰踴蹟蹤躊躍躥軀車軋軌軍軒軟軸較載輓輔輕輛輝輥輩輪輯輸輻輾輿轄轅轉轍轎轟辦辭辮辯農迴逕這連週進遊運過達違遙遜遞遠遡適遲遶遷選遺遼邁還邊邏郵鄉鄒鄖鄧鄭鄰鄲醖醜醞醣醫醬釀釁釋釐釘針釣釦釩釺鈅鈉鈍鈎鈔鈕鈞鈡鈣鈴鈾鉀鉅鉆鉑鉗鉚鉛鉢鉤鉸鉻銀銅銑銘銜銥銳銷銹銻鋁鋅鋇鋒鋤鋪鋭鋸鋼錄錐錘錠錢錦錨錫錯録錳錶鍁鍊鍋鍍鍘鍛鍬鍵鍺鍼鍾鎂鎊鎌鎖鎚鎢鎬鎭鎮鎳鏇鏈鏟鏡鏽鐐鐘鐮鐳鐵鑄鑑鑒鑰鑲鑷鑼鑽鑿長門閃閉開閏閑閒間閘閡閣閤閥閨閩閱閲閹閻闆闇闊闌闖關闡闢陝陞陣陰陳陸陽隊階隕際隨險隱隴隸隻雖雙雛雜雞離難雲電霑霧靈靜鞏鞦韆韋韌韓韻響頁頂頃項順須頌預頑頒頓頗領頤頭頰頸頹頻頽顆題額顏顔願顛類顧顫顯顱顴風颱颳飄飛飢飯飲飼飽飾餃餅養餌餒餓餘餞餡館餬餵餾饅饋饑饒饞馬馭馮馱馳馴駁駐駒駕駛駝駡駭駱駿騁騎騙騰騷騾驅驕驗驚驟驢骯髒體髮鬆鬍鬚鬥鬧鬨鬱魚魯鮑鮮鯉鯨鰓鱉鱗鳥鳳鳴鴉鴕鴛鴦鴨鴻鴿鵑鵝鵬鵰鵲鶴鷄鷗鷹鹵鹹鹼鹽麗麥麪麫麯麴麵麼麽黃點黨黴鼕齊齋齒齡齣齧齲龍龐龔龜";
-  const T2S_TO = "丢并干乱亚布占并来仑侣局系侠私俩仓个们幸伦伟侧侦伪杰伞备家佣传债伤倾仅侨仆伪侥雇价仪俊亿侩俭尽偿优储凶兑儿内两册幂净冻凛凯别删则克刹刚剥剐创铲划札剧刘刽剑剂劲动务勋胜劳势勋励劝匀汇区协恤却即厕历厌厉参叁丛吴呐吕员念问启哑启唤丧吃乔单哟呛吗呜叹呕尝哗啸恶嘘喷吨当吓尝啮咽咙向严嚣苏嘱囱国围园圆图团坝采执坚尧报场块涂坞尘堑垫坠堕坛坟墙垦坛压垒坛坏垄坝壮壶寿够梦伙夹奥夺奖奋妆奸娱娄妇妈娇婴婶娘孙学孪宫采寝实宁审写宽宠宝将专寻对导届尸屉屡层属冈峰岛峡昆岗仑岁崭岭屿岳岿峦岩帅师帐带帧帜币帮并干几库厕厢厩厦荫厨庙厂废广庐厅吊张强别弹弥弯录汇彦雕佛后径从复征彻恒耻悦闷凄恶恼爱栗态惨惭惯怂虑庆戚欲忧惫怜凭惮愤悯宪忆恳应蒙惩懒怀悬惧慑恋战戏户捍抛拼挟舍挨卷扫抡挣挂采拣扬换挥损摇捣扇抢搂挚抠折掺捞撑挠掸拨抚扑挞挝捡拥掳择击挡担据挤抬捣拟摈拧搁掷扩摆擞扰撵拢拦搀携摄攒挛摊搅揽教败叙敌数敛毙斩断于旗既升时晋昼晕畅暂历晓向旷晒书会术东拐栅拐查杆条弃棋枣栋栈栖杨枫业极矩干荣构枪杠桨桩乐梁楼标枢样朴树桥机椭横档检台柠槛柜橱樱栏权钦叹欧欢岁历归残僵歼杀壳壳毁殴毡气氢泛泛污决没冲况溯泄汹凉凄泪净凌沦渊浅涣减涡测浑凑涌汤准沟温湿沧灭涤汇沪滞渗卤滚满渔沤汉涟渍涨渐浆泼洁潜润溃涩浇涝涧泽淀浊浓湿泞蒙济涛滥潍滨溅滤泻沈濒沥弥澜洒漓滩湾滦灾为乌烃无炼烟焕烦荧热炽灯烧烫营灿毁烛烩熏烬烁炉烂争为爷尔床墙抵牵犊牺状狭狈狰犹呆狱狮奖独狞获猎兽獭献现雕珐琐瑶莹玛环琼瓮产产亩毕画异画当畴叠痉酸疯疡痪疮疟疗愈瘪痴痒症癣痈瘫发皂皑皱杯盗盏尽监盘卢荡真众困睁瞒蒙瞩矫朱砚硕确码砖础碍矿砾矾秘禄祸御礼祷秃税秆棱种称谷积颖秽稳获窝洼穷窑窥窜窍灶窃竖竞笔笋个笺札节范筑筛篓蓑简签帘篮筹笼签篱箩吁粤粪粮团纠纪约红纫纹纳纽纯纱纸级纷纺扎细绅绍终弦组绊结绝绦绞络绚给绒统丝绝绢绑绣绥捆经综绿绸线维纲网绷缀彩纶绽绰绵紧绿绪缄线缉缎缔缘编缓缅纬练致缚县绦缝缩纵纤缕总绩绷织缮绕绣绳绘系茧缴绎继续累缠缨才纤缆钵坛坛罚骂罢罗群羡义习玩翘圣闻联聪声耸聂职听聋肃胁脉唇修脱胀肾脑肿脚肠肤胶腻胆脓脸脐腊脏卧临台与兴举旧铺馆舱舰艰艳兹荆庄茎荚华烟莱万叶苇药荤搜苍席盖莲卜参蒋葱荫荡芜萧蓟姜蔷荐萨苔蓝艺药蕴蔼芦苏蕴苹兰萝处虚虏号亏蜕蚀虾虱蜗蚂萤蛰蝉虫蚁蝇蝎蜡蛊蚕蛮众蔑术同胡卫冲夹里补装里制复裤袄袜摆衬袭核见规觅视亲觉览观触订讣计讯讨训讫托记讹讶讼诀访设许诉诊注证诈评诅词咏询诣试诗诧诡话该详诛夸志认诞诱语诚诫诬误诵诲说说谁课诽谊调谆谈请谅论谍谐咨讳讽诸谚诺谋谓誊诌谎谜谤谦讲谢谣谣谬谨谩哗证讥识谭谱噪毁译议谴护誉读变谗让谰赞溪岂竖丰艳猪狸猫贝贞负财贡贫货贩贪贯责贮贰贵贬买贷费贴贸贺赂赁贿资贾贼赊宾赐赏赔贤卖贱赋质账赌赖赚购赛赘赠赞赡赢赃赎赣赃赶赵趋迹践逾踊迹踪踌跃蹿躯车轧轨军轩软轴较载挽辅轻辆辉辊辈轮辑输辐辗舆辖辕转辙轿轰办辞辫辩农回径这连周进游运过达违遥逊递远溯适迟绕迁选遗辽迈还边逻邮乡邹郧邓郑邻郸酝丑酝糖医酱酿衅释厘钉针钓扣钒钎钥钠钝钩钞钮钧钟钙铃铀钾巨钻铂钳铆铅钵钩铰铬银铜铣铭衔铱锐销锈锑铝锌钡锋锄铺锐锯钢录锥锤锭钱锦锚锡错录锰表锨炼锅镀铡锻锹键锗针钟镁镑镰锁锤钨镐镇镇镍旋链铲镜锈镣钟镰镭铁铸鉴鉴钥镶镊锣钻凿长门闪闭开闰闲闲间闸阂阁合阀闺闽阅阅阉阎板暗阔阑闯关阐辟陕升阵阴陈陆阳队阶陨际随险隐陇隶只虽双雏杂鸡离难云电沾雾灵静巩秋千韦韧韩韵响页顶顷项顺须颂预顽颁顿颇领颐头颊颈颓频颓颗题额颜颜愿颠类顾颤显颅颧风台刮飘飞饥饭饮饲饱饰饺饼养饵馁饿余饯馅馆糊喂馏馒馈饥饶馋马驭冯驮驰驯驳驻驹驾驶驼骂骇骆骏骋骑骗腾骚骡驱骄验惊骤驴肮脏体发松胡须斗闹哄郁鱼鲁鲍鲜鲤鲸鳃鳖鳞鸟凤鸣鸦鸵鸳鸯鸭鸿鸽鹃鹅鹏雕鹊鹤鸡鸥鹰卤咸碱盐丽麦面面曲曲面么么黄点党霉冬齐斋齿龄出啮龋龙庞龚龟";
+  /* Traditional -> Simplified, generated from OpenCC (master) by
+   * tools/gen-t2s.mjs: TSCharacters plus TWVariants / HKVariants /
+   * JPShinjitai / CJK compatibility ideographs chained through it
+   * (桜→櫻→樱, 豈→豈). Spotify often ships Taiwanese / HK metadata
+   * (「周杰倫」「說好的幸福呢」) while NetEase / QQ use simplified
+   * Chinese. Character-level fold with OpenCC's first candidate; both
+   * sides go through normalize(), so consistent loss still matches. */
+  const T2S_FROM = "㑯㑳㑶㓨㘚㜄㜏㠏㥮㩜㩳㩵䁻䃮䊷䋙䋚䋹䋻䍦䎱䙡䜀䝼䥇䥑䥱䦛䦟䯀䰾䱷䱽䲁䲘䴉丟並乾亂亙亞佇佈佔併來侖侶侷俁係俔俠俥俬倀倆倈倉個們倖倫倲偉偑側偵偽傌傑傖傘備傢傭傯傳傴債傷傾僂僅僉僑僕僞僥僨僱價儀儁儂億儈儉儎儐儔儕儘償優儲儷儸儺儻儼兇兌兒兗內兩冊冑冪凈凍凜凱別刪剄則剋剎剗剛剝剮剴創剷劃劄劇劉劊劌劍劏劑劚勁動務勛勝勞勢勩勱勳勵勸勻匭匯匱區協卹卻卽厙厠厤厭厲厴參叄叢吒吳吶呂咼員唄唸問啓啞啟啢喎喚喪喫喬單喲嗆嗇嗊嗎嗚嗩嗶嘆嘍嘓嘔嘖嘗嘜嘩嘮嘯嘰嘵嘸嘽噁噓噚噝噠噥噦噯噲噴噸噹嚀嚇嚌嚐嚕嚙嚥嚦嚨嚮嚲嚳嚴嚶囀囁囂囅囈囉囌囑囪圇國圍園圓圖團垻埡埰執堅堊堖堝堯報場塊塋塏塒塗塚塢塤塵塹墊墜墮墰墳墶墻墾壇壋壎壓壘壙壚壜壞壟壠壢壩壪壯壺壼壽夠夢夥夾奐奧奩奪奬奮奼妝姍姦娛婁婦婭媧媯媰媼媽嫋嫗嫵嫺嫻嫿嬀嬃嬈嬋嬌嬙嬡嬤嬪嬰嬸孃孋孌孫學孿宮寀寢實寧審寫寬寵寶將專尋對導尷屆屍屓屜屢層屨屬岡峯峴島峽崍崑崗崙崢崬嵐嵗嵾嶁嶄嶇嶔嶗嶠嶢嶧嶨嶮嶸嶺嶼嶽巋巒巔巖巰巹帥師帳帶幀幃幓幗幘幟幣幫幬幷幹幾庫廁廂廄廈廎廕廚廝廟廠廡廢廣廩廬廳弒弔弳張強彆彈彌彎彔彙彠彥彫彲彿後徑從徠復徵徹恆恥悅悞悵悶悽惡惱惲惻愛愜愨愴愷愾慄態慍慘慚慟慣慤慪慫慮慳慶慺慼慾憂憊憐憑憒憖憚憤憫憮憲憶懇應懌懍懞懟懣懤懨懲懶懷懸懺懼懾戀戇戔戧戩戰戱戲戶扞拋拚挩挱挾捨捫捱捲掃掄掆掗掙掛採揀揚換揮揯損搖搗搧搵搶摑摜摟摯摳摶摺摻撈撏撐撓撝撟撣撥撫撲撳撻撾撿擁擄擇擊擋擓擔據擠擡擣擬擯擰擱擲擴擷擺擻擼擽擾攄攆攏攔攖攙攛攜攝攢攣攤攪攬敎敓敗敘敵數斂斃斆斕斬斷於旂旣昇時晉晝暈暉暘暢暫曄曆曇曉曏曖曠曨曬書會朧朮東枴柵柺査桿梔梘條梟梲棄棊棖棗棟棡棧棲棶椏椲楊楓楨業極榘榦榪榮榲榿構槍槓槤槧槨槮槳槶槼樁樂樅樑樓標樞樢樣樧樫樳樸樹樺樿橈橋機橢橫檁檉檔檜檟檢檣檮檯檳檸檻櫃櫓櫚櫛櫝櫞櫟櫥櫧櫨櫪櫫櫬櫱櫳櫸櫻欄欅權欏欒欖欞欽歎歐歟歡歲歷歸歿殘殞殤殨殫殭殮殯殰殲殺殻殼毀毆毿氂氈氌氣氫氬氳氾汎汙決沒沖況泝洩洶浹涇涗涼淒淚淥淨淩淪淵淶淺渙減渢渦測渾湊湞湧湯溈準溝溫溮溳溼滄滅滌滎滙滬滯滲滷滸滻滾滿漁漊漚漢漣漬漲漵漸漿潁潑潔潙潚潛潤潯潰潷潿澀澆澇澐澗澠澤澦澩澮澱澾濁濃濄濕濘濚濛濜濟濤濧濫濰濱濺濼濾瀂瀅瀆瀇瀉瀋瀏瀕瀘瀝瀟瀠瀦瀧瀨瀰瀲瀾灃灄灑灕灘灝灡灣灤灧灩災為烏烴無煉煒煙煢煥煩煬煱熅熒熗熱熲熾燁燈燉燒燙燜營燦燬燭燴燶燻燼燾爍爐爛爭爲爺爾牀牆牘牴牽犖犛犢犧狀狹狽猙猶猻獁獃獄獅獎獨獪獫獮獰獱獲獵獷獸獺獻獼玀現琱琺琿瑋瑒瑣瑤瑩瑪瑲璉璡璣璦璫璯環璵璸璽璿瓊瓏瓔瓚甌甕產産畝畢畫異畵當疇疊痙痠痾瘂瘋瘍瘓瘞瘡瘧瘮瘲瘺瘻療癆癇癉癒癘癟癡癢癤癥癧癩癬癭癮癰癱癲發皁皚皰皸皺盃盜盞盡監盤盧盪眞眥眾睏睜睞瞘瞜瞞瞶瞼矇矓矚矯硃硜硤硨硯碕碩碭碸確碼碽磑磚磠磣磧磯磽磾礄礎礙礦礪礫礬礱祕祿禍禎禕禡禦禪禮禰禱禿秈稅稈稏稜稟種稱穀穇穌積穎穠穡穢穩穫穭窩窪窮窯窵窶窺竄竅竇竈竊竪競筆筍筧筴箇箋箏箚節範築篋篔篠篤篩篳簀簍簑簞簡簣簫簹簽簾籃籌籔籙籛籜籟籠籤籩籪籬籮籲粵糉糝糞糧糰糲糴糶糹糾紀紂約紅紆紇紈紉紋納紐紓純紕紖紗紘紙級紛紜紝紡紬紮細紱紲紳紵紹紺紼紿絀終絃組絅絆絎結絕絛絝絞絡絢給絨絰統絲絳絶絹綁綃綆綈綉綌綏綐綑經綜綞綠綢綣綫綬維綯綰綱網綳綴綵綸綹綺綻綽綾綿緄緇緊緋緑緒緓緔緗緘緙線緝緞締緡緣緦編緩緬緯緱緲練緶緹緻緼縈縉縊縋縐縑縕縗縛縝縞縟縣縧縫縭縮縱縲縳縴縵縶縷縹總績繃繅繆繒織繕繚繞繡繢繩繪繫繭繮繯繰繳繸繹繼繽繾繿纇纈纊續纍纏纓纔纖纘纜缽罃罈罌罎罰罵罷羅羆羈羋羣羥羨義羶習翫翬翹翽耬耮聖聞聯聰聲聳聵聶職聹聽聾肅脅脈脛脣脩脫脹腎腖腡腦腫腳腸膃膕膚膞膠膩膽膾膿臉臍臏臘臚臟臠臢臥臨臺與興舉舊舖舘艙艤艦艫艱艷芻苧茲荊莊莖莢莧華菴菸萇萊萬萴萵葉葒葤葦葯葷蒐蒓蒔蒕蒞蒼蓀蓆蓋蓮蓯蓴蓽蔔蔘蔞蔣蔥蔦蔭蕁蕆蕎蕒蕓蕕蕘蕢蕩蕪蕭蕷薀薈薊薌薑薔薘薟薦薩薴薵薹薺藍藎藝藥藪藭藴藶藹藺蘀蘄蘆蘇蘊蘋蘚蘞蘢蘭蘺蘿虆處虛虜號虧虯蛺蛻蜆蝕蝟蝦蝨蝸螄螞螢螮螻螿蟄蟈蟎蟣蟬蟯蟲蟶蟻蠁蠅蠆蠍蠐蠑蠔蠟蠣蠨蠱蠶蠻衆衊術衕衚衛衝袞袷裊裏補裝裡製複褌褘褲褳褸褻襇襉襏襖襝襠襤襪襬襯襲襴覈見覎規覓視覘覡覥覦親覬覯覲覷覺覽覿觀觴觶觸訁訂訃計訊訌討訐訒訓訕訖託記訛訝訟訢訣訥訩訪設許訴訶診註証詁詆詎詐詒詔評詖詗詘詛詞詠詡詢詣試詩詫詬詭詮詰話該詳詵詼詿誄誅誆誇誌認誑誒誕誘誚語誠誡誣誤誥誦誨說説誰課誶誹誼誾調諂諄談諉請諍諏諑諒論諗諛諜諝諞諡諢諤諦諧諫諭諮諱諳諶諷諸諺諼諾謀謁謂謄謅謊謎謐謔謖謗謙謚講謝謠謡謨謫謬謭謳謹謾譁證譎譏譖識譙譚譜譟譫譭譯議譴護譸譽譾讀讅變讋讌讎讒讓讕讖讚讜讞谿豈豎豐豔豬豶貍貓貙貝貞貟負財貢貧貨販貪貫責貯貰貲貳貴貶買貸貺費貼貽貿賀賁賂賃賄賅資賈賊賑賒賓賕賙賚賜賞賠賡賢賣賤賦賧質賫賬賭賰賴賵賺賻購賽賾贄贅贇贈贊贋贍贏贐贓贔贖贗贛贜赬趕趙趨趲跡踐踰踴蹌蹕蹟蹠蹣蹤蹺躂躉躊躋躍躎躑躒躓躕躚躡躥躦躪軀車軋軌軍軑軒軔軛軟軤軫軲軸軹軺軻軼軾較輅輇輈載輊輒輓輔輕輛輜輝輞輟輥輦輩輪輬輯輳輸輻輼輾輿轀轂轄轅轆轉轍轎轔轟轡轢轤辦辭辮辯農迴逕這連週進遊運過達違遙遜遞遠遡適遲遶遷選遺遼邁還邇邊邏邐郟郵鄆鄉鄒鄔鄖鄧鄭鄰鄲鄴鄶鄺酇酈醃醖醜醞醟醣醫醬醱釀釁釃釅釋釐釒釓釔釕釗釘釙針釣釤釦釧釩釵釷釹釺釾鈀鈁鈃鈄鈅鈈鈉鈍鈎鈐鈑鈒鈔鈕鈞鈡鈣鈥鈦鈧鈮鈰鈳鈴鈷鈸鈹鈺鈽鈾鈿鉀鉅鉆鉈鉉鉋鉍鉑鉕鉗鉚鉛鉞鉢鉤鉦鉬鉭鉳鉶鉸鉺鉻鉿銀銃銅銍銑銓銖銘銚銛銜銠銣銥銦銨銩銪銫銬銱銳銷銹銻銼鋁鋃鋅鋇鋌鋏鋒鋙鋝鋟鋣鋤鋥鋦鋨鋩鋪鋭鋮鋯鋰鋱鋶鋸鋼錁錄錆錇錈錏錐錒錕錘錙錚錛錟錠錡錢錦錨錩錫錮錯録錳錶錸錼鍀鍁鍃鍅鍆鍇鍈鍊鍋鍍鍔鍘鍚鍛鍠鍤鍥鍩鍬鍰鍵鍶鍺鍼鍾鎂鎄鎇鎊鎌鎔鎖鎘鎚鎛鎡鎢鎣鎦鎧鎩鎪鎬鎭鎮鎰鎲鎳鎵鎶鎸鎿鏃鏇鏈鏌鏍鏐鏑鏗鏘鏜鏝鏞鏟鏡鏢鏤鏨鏰鏵鏷鏹鏺鏽鐃鐋鐐鐒鐓鐔鐘鐙鐝鐠鐥鐦鐧鐨鐫鐮鐯鐲鐳鐵鐶鐸鐺鐿鑄鑊鑌鑑鑒鑔鑕鑞鑠鑣鑥鑭鑰鑱鑲鑷鑹鑼鑽鑾鑿钁钂長門閂閃閆閈閉開閌閎閏閑閒間閔閘閡閣閤閥閨閩閫閬閭閱閲閶閹閻閼閽閾閿闃闆闇闈闊闋闌闍闐闒闓闔闕闖關闞闠闡闢闤闥陘陝陞陣陰陳陸陽隉隊階隕際隨險隯隱隴隸隻雋雖雙雛雜雞離難雲電霑霢霧霽靂靄靆靈靉靚靜靝靦靨鞏鞝鞦鞽韁韃韆韉韋韌韍韓韙韜韝韞韻響頁頂頃項順頇須頊頌頎頏預頑頒頓頗領頜頡頤頦頭頮頰頲頴頷頸頹頻頽顆題額顎顏顒顓顔願顙顛類顢顥顧顫顬顯顰顱顳顴風颭颮颯颱颳颶颸颺颻颼飀飄飆飈飛飠飢飣飥飩飪飫飭飯飱飲飴飼飽飾飿餃餄餅餈餉養餌餎餏餑餒餓餕餖餘餚餛餜餞餡館餬餱餳餵餶餷餺餼餾餿饁饃饅饈饉饊饋饌饑饒饗饜饞饢馬馭馮馱馳馴馹駁駐駑駒駔駕駘駙駛駝駟駡駢駭駰駱駸駿騁騂騅騌騍騎騏騖騙騤騧騫騭騮騰騶騷騸騾驀驁驂驃驄驅驊驌驍驏驕驗驚驛驟驢驤驥驦驪驫骯髏髒體髕髖髮鬆鬍鬚鬢鬥鬧鬨鬩鬮鬱鬹魎魘魚魛魢魨魯魴魷魺鮁鮃鮊鮋鮍鮎鮐鮑鮒鮓鮚鮜鮝鮞鮣鮦鮪鮫鮭鮮鮳鮶鮺鯀鯁鯇鯉鯊鯒鯔鯕鯖鯗鯛鯝鯡鯢鯤鯧鯨鯪鯫鯰鯴鯷鯽鯿鰁鰂鰃鰆鰈鰉鰌鰍鰏鰐鰒鰓鰛鰜鰟鰠鰣鰥鰧鰨鰩鰭鰮鰱鰲鰳鰵鰷鰹鰺鰻鰼鰾鱂鱅鱈鱉鱒鱔鱖鱗鱘鱝鱟鱠鱣鱤鱧鱨鱭鱯鱷鱸鱺鳥鳧鳩鳬鳲鳳鳴鳶鳾鴆鴇鴉鴒鴕鴛鴝鴞鴟鴣鴦鴨鴯鴰鴴鴷鴻鴿鵁鵂鵃鵐鵑鵒鵓鵜鵝鵠鵡鵪鵬鵮鵯鵰鵲鵷鵾鶄鶇鶉鶊鶓鶖鶘鶚鶡鶥鶩鶪鶬鶯鶲鶴鶹鶺鶻鶼鶿鷀鷁鷂鷄鷉鷊鷓鷖鷗鷙鷚鷥鷦鷫鷯鷲鷳鷴鷸鷹鷺鷽鸂鸇鸊鸌鸏鸕鸘鸚鸛鸝鸞鹵鹹鹺鹼鹽麗麥麩麪麫麯麴麵麼麽黃黌點黨黲黴黶黷黽黿鼂鼉鼕鼴齊齋齎齏齒齔齕齗齙齜齟齠齡齣齦齧齪齬齲齶齷龍龎龐龑龔龕龜鿁鿓幺檐潨痹着睾蔿両乗亀予亜仏仮伝価倹児円処剣剤剰労効勅勧勲単厳収叙唖営噛団囲図圏圧塁塩増壊壌壱売変奨嬢実寛対専尭巌巣巻帯帰庁広廃弁弐弾従徳徴応恵悩悪慎懐戦戯戻払抜択拝拠拡挙挿捜掲掻揺摂撃撹斉斎晃晩暁暦曽栄桜桝桟検楽概様槙権欠歓歩歯歳歴毎気沢沪浄浜涙渇済渉渋渓満滝瀬焼犠猟獣瓶畳痩発県研砕稲穂穏穣竜粋粛糸経絵継続総縁縄縦繊繍缶翻聴脳臓艶芸荘萌蔵薫薬蛍蝋褒覇覚覧観訳読譲豊賛転軽辺逓遅郎郷酔醤醸釈鉄鉱銭鋳錬関闘陥険隠雑霊頼顕駅駆騒験髄髪鴎鶏鹸麹麺黒黙齢豈更車賈滑串句龜龜契金喇奈懶癩羅蘿螺裸邏樂洛烙珞落酪駱亂卵欄爛蘭鸞嵐濫藍襤拉臘蠟廊朗浪狼郎來冷勞擄櫓爐盧老蘆虜路露魯鷺碌祿綠菉錄鹿論壟弄籠聾牢磊賂雷壘屢樓淚漏累縷陋勒肋凜凌稜綾菱陵讀拏樂諾丹寧怒率異北磻便復不泌數索參塞省葉說殺辰沈拾若掠略亮兩凉梁糧良諒量勵呂女廬旅濾礪閭驪麗黎力曆歷轢年憐戀撚漣煉璉秊練聯輦蓮連鍊列劣咽烈裂說廉念捻殮簾獵令囹寧嶺怜玲瑩羚聆鈴零靈領例禮醴隸惡了僚寮尿料樂燎療蓼遼龍暈阮劉杻柳流溜琉留硫紐類六戮陸倫崙淪輪律慄栗率隆利吏履易李梨泥理痢罹裏裡里離匿溺吝燐璘藺隣鱗麟林淋臨立笠粒狀炙識什茶刺切度拓糖宅洞暴輻行降見廓兀嗀塚晴凞猪益礼神祥福靖精羽蘒諸逸都飯飼館鶴郞隷侮僧免勉勤卑喝嘆器塀墨層屮悔慨憎懲敏既暑梅海渚漢煮爫琢碑社祉祈祐祖祝禍禎穀突節練縉繁署者臭艹艹著褐視謁謹賓贈辶逸難響頻恵舘並况全侀充冀勇勺喝啕喙嗢塚墳奄奔婢嬨廒廙彩徭惘慎愈憎慠懲戴揄搜摒敖晴朗望杖歹殺流滛滋漢瀞煮瞧爵犯猪瑱甆画瘝瘟益盛直睊着磌窱節类絛練缾者荒華蝹襁覆視調諸請謁諾諭謹變贈輸遲醙鉶陼難靖韛響頋頻鬒龜㮝䀘䀹齃龎";
+  const T2S_TO = "㑔㑇㐹刾㘎㚯㛣㟆㤘㨫㧐擜䀥鿎䌶䌺䌻䌿䌾䍠䎬䙌䜧䞍䦂鿏䥾䦶䦷䯅鲃䲣䲝鳚鳤鹮丢并干乱亘亚伫布占并来仑侣局俣系伣侠伡私伥俩俫仓个们幸伦㑈伟㐽侧侦伪㐷杰伧伞备家佣偬传伛债伤倾偻仅佥侨仆伪侥偾雇价仪俊侬亿侩俭傤傧俦侪尽偿优储俪㑩傩傥俨凶兑儿兖内两册胄幂净冻凛凯别删刭则克刹刬刚剥剐剀创铲划札剧刘刽刿剑㓥剂㔉劲动务勋胜劳势勚劢勋励劝匀匦汇匮区协恤却即厍厕历厌厉厣参叁丛咤吴呐吕呙员呗念问启哑启唡㖞唤丧吃乔单哟呛啬唝吗呜唢哔叹喽啯呕啧尝唛哗唠啸叽哓呒啴恶嘘㖊咝哒哝哕嗳哙喷吨当咛吓哜尝噜啮咽呖咙向亸喾严嘤啭嗫嚣冁呓啰苏嘱囱囵国围园圆图团坝垭采执坚垩垴埚尧报场块茔垲埘涂冢坞埙尘堑垫坠堕坛坟垯墙垦坛垱埙压垒圹垆坛坏垄垅坜坝塆壮壶壸寿够梦伙夹奂奥奁夺奖奋姹妆姗奸娱娄妇娅娲妫㛀媪妈袅妪妩娴娴婳妫媭娆婵娇嫱嫒嬷嫔婴婶娘㛤娈孙学孪宫采寝实宁审写宽宠宝将专寻对导尴届尸屃屉屡层屦属冈峰岘岛峡崃昆岗仑峥岽岚岁㟥嵝崭岖嵚崂峤峣峄峃崄嵘岭屿岳岿峦巅岩巯卺帅师帐带帧帏㡎帼帻帜币帮帱并干几库厕厢厩厦庼荫厨厮庙厂庑废广廪庐厅弑吊弪张强别弹弥弯录汇彟彦雕彨佛后径从徕复征彻恒耻悦悮怅闷凄恶恼恽恻爱惬悫怆恺忾栗态愠惨惭恸惯悫怄怂虑悭庆㥪戚欲忧惫怜凭愦慭惮愤悯怃宪忆恳应怿懔蒙怼懑㤽恹惩懒怀悬忏惧慑恋戆戋戗戬战戯戏户捍抛拼捝挲挟舍扪挨卷扫抡㧏挜挣挂采拣扬换挥搄损摇捣扇揾抢掴掼搂挚抠抟折掺捞挦撑挠㧑挢掸拨抚扑揿挞挝捡拥掳择击挡㧟担据挤抬捣拟摈拧搁掷扩撷摆擞撸㧰扰摅撵拢拦撄搀撺携摄攒挛摊搅揽教敚败叙敌数敛毙敩斓斩断于旗既升时晋昼晕晖旸畅暂晔历昙晓向暧旷昽晒书会胧术东拐栅拐查杆栀枧条枭棁弃棋枨枣栋㭎栈栖梾桠㭏杨枫桢业极矩干杩荣榅桤构枪杠梿椠椁椮桨椢椝桩乐枞梁楼标枢㭤样榝㭴桪朴树桦椫桡桥机椭横檩柽档桧槚检樯梼台槟柠槛柜橹榈栉椟橼栎橱槠栌枥橥榇蘖栊榉樱栏榉权椤栾榄棂钦叹欧欤欢岁历归殁残殒殇㱮殚僵殓殡㱩歼杀壳壳毁殴毵牦毡氇气氢氩氲泛泛污决没冲况溯泄汹浃泾涚凉凄泪渌净凌沦渊涞浅涣减沨涡测浑凑浈涌汤沩准沟温浉涢湿沧灭涤荥汇沪滞渗卤浒浐滚满渔溇沤汉涟渍涨溆渐浆颍泼洁沩㴋潜润浔溃滗涠涩浇涝沄涧渑泽滪泶浍淀㳠浊浓㳡湿泞溁蒙浕济涛㳔滥潍滨溅泺滤澛滢渎㲿泻沈浏濒泸沥潇潆潴泷濑弥潋澜沣滠洒漓滩灏㳕湾滦滟滟灾为乌烃无炼炜烟茕焕烦炀㶽煴荧炝热颎炽烨灯炖烧烫焖营灿毁烛烩㶶熏烬焘烁炉烂争为爷尔床墙牍抵牵荦牦犊牺状狭狈狰犹狲犸呆狱狮奖独狯猃狝狞㺍获猎犷兽獭献猕猡现雕珐珲玮玚琐瑶莹玛玱琏琎玑瑷珰㻅环玙瑸玺璇琼珑璎瓒瓯瓮产产亩毕画异画当畴叠痉酸疴痖疯疡痪瘗疮疟瘆疭瘘瘘疗痨痫瘅愈疠瘪痴痒疖症疬癞癣瘿瘾痈瘫癫发皂皑疱皲皱杯盗盏尽监盘卢荡真眦众困睁睐眍䁖瞒瞆睑蒙眬瞩矫朱硁硖砗砚埼硕砀砜确码䂵硙砖硵碜碛矶硗䃅硚础碍矿砺砾矾砻秘禄祸祯祎祃御禅礼祢祷秃籼税秆䅉棱禀种称谷䅟稣积颖秾穑秽稳获穞窝洼穷窑窎窭窥窜窍窦灶窃竖竞笔笋笕䇲个笺筝札节范筑箧筼筿笃筛筚箦篓蓑箪简篑箫筜签帘篮筹䉤箓篯箨籁笼签笾簖篱箩吁粤粽糁粪粮团粝籴粜纟纠纪纣约红纡纥纨纫纹纳纽纾纯纰纼纱纮纸级纷纭纴纺䌷扎细绂绁绅纻绍绀绋绐绌终弦组䌹绊绗结绝绦绔绞络绚给绒绖统丝绛绝绢绑绡绠绨绣绤绥䌼捆经综缍绿绸绻线绶维绹绾纲网绷缀彩纶绺绮绽绰绫绵绲缁紧绯绿绪绬绱缃缄缂线缉缎缔缗缘缌编缓缅纬缑缈练缏缇致缊萦缙缢缒绉缣缊缞缚缜缟缛县绦缝缡缩纵缧䌸纤缦絷缕缥总绩绷缫缪缯织缮缭绕绣缋绳绘系茧缰缳缲缴䍁绎继缤缱䍀颣缬纩续累缠缨才纤缵缆钵䓨坛罂坛罚骂罢罗罴羁芈群羟羡义膻习玩翚翘翙耧耢圣闻联聪声耸聩聂职聍听聋肃胁脉胫唇修脱胀肾胨脶脑肿脚肠腽腘肤䏝胶腻胆脍脓脸脐膑腊胪脏脔臜卧临台与兴举旧铺馆舱舣舰舻艰艳刍苎兹荆庄茎荚苋华庵烟苌莱万荝莴叶荭荮苇药荤搜莼莳蒀莅苍荪席盖莲苁莼荜卜参蒌蒋葱茑荫荨蒇荞荬芸莸荛蒉荡芜萧蓣蕰荟蓟芗姜蔷荙莶荐萨苧䓓苔荠蓝荩艺药薮䓖蕴苈蔼蔺萚蕲芦苏蕴苹藓蔹茏兰蓠萝蔂处虚虏号亏虬蛱蜕蚬蚀猬虾虱蜗蛳蚂萤䗖蝼螀蛰蝈螨虮蝉蛲虫蛏蚁蚃蝇虿蝎蛴蝾蚝蜡蛎蟏蛊蚕蛮众蔑术同胡卫冲衮夹袅里补装里制复裈袆裤裢褛亵裥裥袯袄裣裆褴袜摆衬袭襕核见觃规觅视觇觋觍觎亲觊觏觐觑觉览觌观觞觯触讠订讣计讯讧讨讦讱训讪讫托记讹讶讼䜣诀讷讻访设许诉诃诊注证诂诋讵诈诒诏评诐诇诎诅词咏诩询诣试诗诧诟诡诠诘话该详诜诙诖诔诛诓夸志认诳诶诞诱诮语诚诫诬误诰诵诲说说谁课谇诽谊訚调谄谆谈诿请诤诹诼谅论谂谀谍谞谝谥诨谔谛谐谏谕咨讳谙谌讽诸谚谖诺谋谒谓誊诌谎谜谧谑谡谤谦谥讲谢谣谣谟谪谬谫讴谨谩哗证谲讥谮识谯谭谱噪谵毁译议谴护诪誉谫读谉变詟䜩雠谗让谰谶赞谠谳溪岂竖丰艳猪豮狸猫䝙贝贞贠负财贡贫货贩贪贯责贮贳赀贰贵贬买贷贶费贴贻贸贺贲赂赁贿赅资贾贼赈赊宾赇赒赉赐赏赔赓贤卖贱赋赕质赍账赌䞐赖赗赚赙购赛赜贽赘赟赠赞赝赡赢赆赃赑赎赝赣赃赪赶赵趋趱迹践逾踊跄跸迹跖蹒踪跷跶趸踌跻跃䟢踯跞踬蹰跹蹑蹿躜躏躯车轧轨军轪轩轫轭软轷轸轱轴轵轺轲轶轼较辂辁辀载轾辄挽辅轻辆辎辉辋辍辊辇辈轮辌辑辏输辐辒辗舆辒毂辖辕辘转辙轿辚轰辔轹轳办辞辫辩农回径这连周进游运过达违遥逊递远溯适迟绕迁选遗辽迈还迩边逻逦郏邮郓乡邹邬郧邓郑邻郸邺郐邝酂郦腌酝丑酝蒏糖医酱酦酿衅酾酽释厘钅钆钇钌钊钉钋针钓钐扣钏钒钗钍钕钎䥺钯钫钘钭钥钚钠钝钩钤钣钑钞钮钧钟钙钬钛钪铌铈钶铃钴钹铍钰钸铀钿钾巨钻铊铉铇铋铂钷钳铆铅钺钵钩钲钼钽锫铏铰铒铬铪银铳铜铚铣铨铢铭铫铦衔铑铷铱铟铵铥铕铯铐铞锐销锈锑锉铝锒锌钡铤铗锋铻锊锓铘锄锃锔锇铓铺锐铖锆锂铽锍锯钢锞录锖锫锩铔锥锕锟锤锱铮锛锬锭锜钱锦锚锠锡锢错录锰表铼镎锝锨锪钫钔锴锳炼锅镀锷铡钖锻锽锸锲锘锹锾键锶锗针钟镁锿镅镑镰镕锁镉锤镈镃钨蓥镏铠铩锼镐镇镇镒镋镍镓鿔镌镎镞旋链镆镙镠镝铿锵镗镘镛铲镜镖镂錾镚铧镤镪䥽锈铙铴镣铹镦镡钟镫镢镨䦅锎锏镄镌镰䦃镯镭铁镮铎铛镱铸镬镔鉴鉴镲锧镴铄镳镥镧钥镵镶镊镩锣钻銮凿镢镋长门闩闪闫闬闭开闶闳闰闲闲间闵闸阂阁合阀闺闽阃阆闾阅阅阊阉阎阏阍阈阌阒板暗闱阔阕阑阇阗阘闿阖阙闯关阚阓阐辟阛闼陉陕升阵阴陈陆阳陧队阶陨际随险陦隐陇隶只隽虽双雏杂鸡离难云电沾霡雾霁雳霭叇灵叆靓静靔腼靥巩绱秋鞒缰鞑千鞯韦韧韨韩韪韬鞲韫韵响页顶顷项顺顸须顼颂颀颃预顽颁顿颇领颌颉颐颏头颒颊颋颕颔颈颓频颓颗题额颚颜颙颛颜愿颡颠类颟颢顾颤颥显颦颅颞颧风飐飑飒台刮飓飔飏飖飕飗飘飙飚飞饣饥饤饦饨饪饫饬饭飧饮饴饲饱饰饳饺饸饼糍饷养饵饹饻饽馁饿馂饾余肴馄馃饯馅馆糊糇饧喂馉馇馎饩馏馊馌馍馒馐馑馓馈馔饥饶飨餍馋馕马驭冯驮驰驯驲驳驻驽驹驵驾骀驸驶驼驷骂骈骇骃骆骎骏骋骍骓骔骒骑骐骛骗骙䯄骞骘骝腾驺骚骟骡蓦骜骖骠骢驱骅骕骁骣骄验惊驿骤驴骧骥骦骊骉肮髅脏体髌髋发松胡须鬓斗闹哄阋阄郁鬶魉魇鱼鱽鱾鲀鲁鲂鱿鲄鲅鲆鲌鲉鲏鲇鲐鲍鲋鲊鲒鲘鲞鲕䲟鲖鲔鲛鲑鲜鲓鲪鲝鲧鲠鲩鲤鲨鲬鲻鲯鲭鲞鲷鲴鲱鲵鲲鲳鲸鲮鲰鲶鲺鳀鲫鳊鳈鲗鳂䲠鲽鳇䲡鳅鲾鳄鳆鳃鳁鳒鳑鳋鲥鳏䲢鳎鳐鳍鳁鲢鳌鳓鳘鲦鲣鲹鳗鳛鳔鳉鳙鳕鳖鳟鳝鳜鳞鲟鲼鲎鲙鳣鳡鳢鲿鲚鳠鳄鲈鲡鸟凫鸠凫鸤凤鸣鸢䴓鸩鸨鸦鸰鸵鸳鸲鸮鸱鸪鸯鸭鸸鸹鸻䴕鸿鸽䴔鸺鸼鹀鹃鹆鹁鹈鹅鹄鹉鹌鹏鹐鹎雕鹊鹓鹍䴖鸫鹑鹒鹋鹙鹕鹗鹖鹛鹜䴗鸧莺鹟鹤鹠鹡鹘鹣鹚鹚鹢鹞鸡䴘鹝鹧鹥鸥鸷鹨鸶鹪鹔鹩鹫鹇鹇鹬鹰鹭鸴㶉鹯䴙鹱鹲鸬鹴鹦鹳鹂鸾卤咸鹾碱盐丽麦麸面面曲曲面么么黄黉点党黪霉黡黩黾鼋鼌鼍冬鼹齐斋赍齑齿龀龁龂龅龇龃龆龄出龈啮龊龉龋腭龌龙厐庞䶮龚龛龟䜤鿒么簷潀痺著睪蒍两乘龟豫亚佛假传价俭儿圆处剑剂剩劳效敕劝勋单严收敍哑营啮团围图圈压垒盐增坏壤壹卖变奖娘实宽对专尧岩巢卷带归厅广废辨贰弹从德征应惠恼恶愼怀战戏戾拂拔择拜据扩擧插搜揭搔摇摄击搅齐斋晄晚晓历曾荣樱枡栈检乐槪样槇权缺欢步齿岁历每气泽滤净滨泪渴济涉澁溪满泷濑烧牺猎兽甁叠瘦发县硏碎稻穗稳穰龙粹肃丝经绘继续总缘绳纵纤绣罐飜听脑脏艳艺庄萠藏薰药萤蜡襃霸觉览观译读让丰赞转轻边递迟郞鄕醉酱酿释铁鑛钱铸炼关鬭陷险隐杂灵赖显驿驱骚验髓发鸥鸡碱曲面黑默龄岂更车贾滑串句龟龟契金喇奈懒癞罗萝螺裸逻乐洛烙珞落酪骆乱卵栏烂兰鸾岚滥蓝褴拉腊蜡廊朗浪狼郞来冷劳掳橹炉卢老芦虏路露鲁鹭碌禄绿菉录鹿论垄弄笼聋牢磊赂雷垒屡楼泪漏累缕陋勒肋凛凌棱绫菱陵读拏乐诺丹宁怒率异北磻便复不泌数索参塞省叶说杀辰沈拾若掠略亮两凉梁粮良谅量励吕女庐旅滤砺闾骊丽黎力历历轹年怜恋撚涟炼琏秊练联辇莲连炼列劣咽烈裂说廉念捻殓帘猎令囹宁岭怜玲莹羚聆铃零灵领例礼醴隶恶了僚寮尿料乐燎疗蓼辽龙晕阮刘杻柳流溜琉留硫纽类六戮陆伦仑沦轮律栗栗率隆利吏履易李梨泥理痢罹里里里离匿溺吝燐璘蔺隣鳞麟林淋临立笠粒状炙识什茶刺切度拓糖宅洞暴辐行降见廓兀嗀冢晴凞猪益礼神祥福靖精羽蘒诸逸都饭饲馆鹤郞隷侮僧免勉勤卑喝叹器塀墨层屮悔慨憎惩敏既暑梅海渚汉煮爫琢碑社祉祈祐祖祝祸祯谷突节练缙繁署者臭艹艹著褐视谒谨宾赠辶逸难响频惠馆并况全侀充冀勇勺喝啕喙嗢冢坟奄奔婢嬨廒廙彩徭惘愼愈憎慠惩戴揄搜摒敖晴朗望杖歹杀流滛滋汉瀞煮瞧爵犯猪瑱甆画瘝瘟益盛直睊著磌窱节类绦练缾者荒华蝹襁覆视调诸请谒诺谕谨变赠输迟醙铏陼难靖韛响頋频鬒龟㮝䀘䀹齃厐";
   let t2s = null;
   function toSimplified(text) {
     if (!/[\u4e00-\u9fff]/.test(text)) return text;
@@ -350,8 +354,71 @@
     return { text, words };
   }
   /* Bumped whenever parsing changes, so lyrics stored by an older parser get re-fetched. */
-  const PARSER_VERSION = 3;
+  const PARSER_VERSION = 4;
   function emptyLyrics(source) { return { source, provider: source, sync_type: 'line', lines: [], parser: PARSER_VERSION }; }
+  /* Whole-line singer tags: NetEase contributors mark each singer's block with
+   * 【name】or（name）(【ミク】, 【2サビメイン】…), QQ duets use a standalone
+   * 男：/女：/合： prefix line instead. Blocks whose timestamps overlap are voices
+   * sung at the same time. The tag line itself is kept (`part_marker`) to render
+   * as a small section label rather than a lyric line. */
+  const PART_LABEL = /^\s*(?:【([^【】]{1,20})】|[（(]([^（）()]{1,12})[)）]|([一-鿿]{1,8})[:：])\s*$/;
+  /* File-order pass over freshly pushed lines: a 【…】line only counts as a part tag
+   * when a real lyric follows within 2 s, and at least two tags must exist — a lone
+   * bracketed line is probably actual lyrics. Confirmed lines get a part number. */
+  function confirmParts(lines) {
+    let labels = 0;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.part_marker === undefined) continue;
+      let ok = false;
+      for (let j = i + 1; j < lines.length; j++) {
+        if (!lines[j].text.trim()) continue;
+        const d = lines[j].start_time_ms - line.start_time_ms;
+        ok = lines[j].part_marker === undefined && d >= -250 && d <= 2000;
+        break;
+      }
+      if (ok) labels++; else line.part_marker = undefined;
+    }
+    if (labels < 2) { for (const line of lines) line.part_marker = undefined; return false; }
+    let part = 0;
+    /* Blank separator lines belong to no voice: giving them a part would truncate the
+     * previous line's window at the block boundary (the blanks sit between blocks but
+     * carry the next block's start time). */
+    for (const line of lines) { if (line.part_marker !== undefined) part++; if (line.text.trim()) line.part = part; }
+    return true;
+  }
+  /* Sorted-order pass: a part line's window ends when its own part advances (part_end
+   * = the same part's next line) — for overlapping voices that is later than the next
+   * line overall, so simultaneous lines can all stay lit. Parts whose time ranges
+   * overlap are sung together; all but the first (in file order) align right (alt). */
+  function finishParts(lines) {
+    const ranges = new Map(), last = new Map();
+    for (const line of lines) {
+      if (line.part === undefined) continue;
+      const prev = last.get(line.part);
+      if (prev) prev.part_end = line.start_time_ms;
+      last.set(line.part, line);
+      if (line.part_marker !== undefined || !line.text.trim()) continue;
+      const r = ranges.get(line.part);
+      if (r) { r.lo = Math.min(r.lo, line.start_time_ms); r.hi = Math.max(r.hi, line.end_time_ms); }
+      else ranges.set(line.part, { lo: line.start_time_ms, hi: line.end_time_ms });
+    }
+    let hi = -Infinity; const alt = new Set();
+    for (const [id, r] of [...ranges].sort((a, b) => a[0] - b[0])) {
+      if (r.lo < hi - 500) { alt.add(id); hi = Math.max(hi, r.hi); } else hi = r.hi;
+    }
+    for (const line of lines) if (alt.has(line.part)) line.alt = true;
+    /* A part's last line had no same-part successor: keep it lit until the next
+     * section tag — its end_time is the next line overall, which inside an
+     * overlapping region belongs to another voice and would dim it mid-phrase. */
+    let mark = Infinity;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      if (line.part === undefined) continue;
+      if (line.part_marker !== undefined) mark = line.start_time_ms;
+      if (line.part_end === undefined) line.part_end = mark === Infinity ? line.end_time_ms : Math.max(mark, line.end_time_ms);
+    }
+  }
   function parseLrc(lrc, translation, source) {
     const result = emptyLyrics(source);
     if (typeof lrc !== 'string' || lrc.length > MAX_RESPONSE) return result;
@@ -371,7 +438,8 @@
       for (const time of times) {
         const parsed = enhancedWords(body);
         hasWords = hasWords || parsed.words.length > 0;
-        lines.push({ text: parsed.text, start_time_ms: time, end_time_ms: time, words: parsed.words });
+        const label = PART_LABEL.exec(parsed.text);
+        lines.push({ text: parsed.text, start_time_ms: time, end_time_ms: time, words: parsed.words, part_marker: label ? label[1] || label[2] || label[3] : undefined });
       }
     }
     if (!lines.length) {
@@ -381,6 +449,7 @@
         if (text && text[0] !== '[' && lines.length < 10000) lines.push({ text, start_time_ms: 0, end_time_ms: 0, words: [] });
       }
     } else if (hasWords) result.sync_type = 'word';
+    const parts = confirmParts(lines);
     lines.sort((a, b) => a.start_time_ms - b.start_time_ms);
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -392,6 +461,7 @@
         word.start_time_ms = ws; word.end_time_ms = we > ws ? we : Math.max(ws, line.end_time_ms);
       }
     }
+    if (parts) finishParts(lines);
     result.lines = lines;
     if (translation) mergeTranslation(lines, translation, source);
     return result;
@@ -765,9 +835,12 @@
       const words = tokens.map((tk, i) => ({ text: body.slice(tk.end, i + 1 < tokens.length ? tokens[i + 1].index : body.length), start_time_ms: tk.start, end_time_ms: tk.start + tk.dur }))
         .filter(w => w.text);
       const text = words.length ? words.map(w => w.text).join('') : body.replace(TOKEN, '');
-      result.lines.push({ text, start_time_ms: start, end_time_ms: start + Math.max(0, +m[2]), words });
+      const label = PART_LABEL.exec(text);
+      result.lines.push({ text, start_time_ms: start, end_time_ms: start + Math.max(0, +m[2]), words, part_marker: label ? label[1] || label[2] || label[3] : undefined });
     }
+    const parts = confirmParts(result.lines);
     result.lines.sort((a, b) => a.start_time_ms - b.start_time_ms);
+    if (parts) finishParts(result.lines);
     result.sync_type = result.lines.some(l => l.words.length) ? 'word' : 'line';
     if (translation) mergeTranslation(result.lines, translation, source);
     return result;
@@ -959,11 +1032,14 @@
      * copy — the update check uses it; the failure cooldown still applies. */
     async providerFetch(candidate, signal, budget, fresh) {
       const key = `${LYRICS_CACHE}:${candidate.provider}:${candidate.id}`;
+      let stale;
       if (fresh) {
         if (await this.store.cacheGet('failure:' + candidate.provider) != null) throw new ProviderError('来源暂不可用，稍后自动重试', 'blocked');
       } else {
         const cached = await this._cached(key, candidate.provider);
-        if (cached !== undefined) return cached;
+        /* A copy parsed by an older parser misses newer line data (vocal parts): refetch,
+         * but keep it around — a stale answer still beats an error when the source is down. */
+        if (cached !== undefined) { if (cached.parser === PARSER_VERSION) return cached; stale = cached; }
       }
       try {
         const requests = fetchRequests(candidate);
@@ -982,7 +1058,7 @@
         /* A fresh check never erases a cached good copy with a temporary "no lyrics". */
         if (!fresh || lyricsUsable(lyrics)) await this.store.cachePut(key, JSON.stringify(lyrics), lyricsUsable(lyrics) ? 0 : 21600);
         return lyrics;
-      } catch (e) { await this._failure(candidate.provider, e); throw e; }
+      } catch (e) { await this._failure(candidate.provider, e); if (stale !== undefined) return stale; throw e; }
     }
     /* One request + parse; a transient service code is retried once. null = HTTP 404. */
     async _exchange(provider, request, signal, budget, retries) {
@@ -1096,7 +1172,9 @@
         const cached = await this.store.cacheGet(lyricsKey); check();
         if (cached) {
           const entry = JSON.parse(cached);
-          if (lyricsUsable(entry.lyrics) && (saved || entry.lyrics.source === 'spotify')) {
+          /* Lyrics parsed by an older parser lack newer line data (vocal parts): refetch
+           * from the bound source instead of serving the stale copy forever. */
+          if (lyricsUsable(entry.lyrics) && entry.lyrics.parser === PARSER_VERSION && (saved || entry.lyrics.source === 'spotify')) {
             ui.install(entry.lyrics, entry.colors, entry.match && candidateFromJson(entry.match), entry.origin || (manual ? 'manual' : 'auto'));
             this.http.cacheHit();
             ui.status(manual ? '已绑定歌词 · 缓存' : '歌词缓存'); return;
@@ -1506,6 +1584,10 @@
       const out = { text: text(line.text, 500), start_time_ms: start, end_time_ms: Math.max(start, time(line.end_time_ms)), words: [] };
       const translated = text(line.translated_text, 500);
       if (translated) out.translated_text = translated;
+      if (Number.isInteger(line.part) && line.part >= 0 && line.part <= 999) out.part = line.part;
+      const marker = text(line.part_marker, 20); if (marker) out.part_marker = marker;
+      if (line.alt === true) out.alt = true;
+      if (Number.isFinite(line.part_end)) out.part_end = Math.max(start, time(line.part_end));
       if (sync === 'word' && Array.isArray(line.words)) {
         for (const word of line.words.slice(0, 400)) {
           const wordText = word && typeof word === 'object' ? text(word.text, 200) : '';

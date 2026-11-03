@@ -930,6 +930,15 @@
    * indented. Lines that begin with one get `sl-hang` (see app.css) so every line aligns left. */
   const HANG_RE = /^\s*[「『【〈《〔〖（［｛]/;
   const hangClass = text => HANG_RE.test(text || '') ? ' sl-hang' : '';
+  /* Per-line singing state at `pos`: a line is current while its own vocal part has
+   * not moved on (part_end = the same part's next line — for overlapping voices that
+   * is later than the next line overall, so simultaneous lines can all be lit).
+   * Returns -1 past, 0 neutral (【name】part tags never light), 1 future, 2 current. */
+  const lineState = (line, pos) => {
+    if (!line || line.part_marker !== undefined) return 0;
+    if (pos >= (line.part_end !== undefined ? line.part_end : line.end_time_ms)) return -1;
+    return line.start_time_ms > pos ? 1 : 2;
+  };
   /* Custom properties are inherited by every line: they are only written when they change,
    * otherwise each write restyles the whole lyrics tree. */
   function setVar(el, name, value) {
@@ -974,7 +983,7 @@
     unwrap() {
       const el = this.els && this.els[this.line], line = this.lines && this.lines[this.line];
       if (el && line) {
-        el.querySelector('.sl-text').textContent = line.text;
+        el.querySelector('.sl-text').textContent = line.part_marker !== undefined ? line.part_marker : line.text;
         const trans = el.querySelector('.sl-trans');
         if (trans && line.translated_text) trans.textContent = line.translated_text;
       }
@@ -1119,8 +1128,9 @@
       this.seekable = this.synced && app.canSeek();
       this.linesBox.classList.toggle('sl-seekable', this.seekable);
       this.linesBox.classList.toggle('sl-static', !this.synced);
-      this.els = this.lines.map((line, i) => h('div', { class: 'sl-line' + (line.text ? '' : ' sl-empty'), 'data-i': i, dir: 'auto' },
-        h('div', { class: 'sl-text' + hangClass(line.text) }, line.text),
+      this.hasParts = this.lines.some(l => l.part !== undefined);
+      this.els = this.lines.map((line, i) => h('div', { class: 'sl-line' + (line.text ? '' : ' sl-empty') + (line.part_marker !== undefined ? ' sl-part' : '') + (line.alt ? ' sl-alt' : ''), 'data-i': i, dir: 'auto' },
+        h('div', { class: 'sl-text' + hangClass(line.alt ? '' : line.part_marker !== undefined ? line.part_marker : line.text) }, line.part_marker !== undefined ? line.part_marker : line.text),
         showTranslation && line.text && line.translated_text ? h('div', { class: 'sl-trans' + hangClass(line.translated_text) }, line.translated_text) : null));
       this.linesBox.replaceChildren(...this.els);
       this.active = -2;
@@ -1131,19 +1141,21 @@
       if (!this.synced || !this.els.length || !this.el.isConnected || this.scroller.hidden) return;
       const position = this.app.position() + this.app.engine.offset();
       const index = Core.lyricsIndex(this.app.engine.lyrics, position);
-      if (index !== this.active || initial) this.moveTo(index, initial);
+      if (index !== this.active || initial) this.moveTo(index, position, initial);
       if (this.words && index >= 0) this.fill.update(this.lines, this.els, index, position);
     }
-    moveTo(index, initial) {
+    moveTo(index, position, initial) {
       const previous = this.active;
       if (this.fill.line >= 0 && this.fill.line !== index) this.fill.unwrap();
       this.active = index;
-      /* Only the lines whose state changed are touched. */
-      const lo = initial || previous < -1 ? 0 : Math.max(0, Math.min(previous, index));
-      const hi = initial || previous < -1 ? this.els.length - 1 : Math.min(this.els.length - 1, Math.max(previous, index));
+      /* Only the lines whose state changed are touched — except multi-voice lyrics,
+       * where one part's window can end anywhere when the other part advances. */
+      const all = initial || previous < -1 || this.hasParts;
+      const lo = all ? 0 : Math.max(0, Math.min(previous, index));
+      const hi = all ? this.els.length - 1 : Math.min(this.els.length - 1, Math.max(previous, index));
       for (let i = lo; i <= hi; i++) {
-        const el = this.els[i];
-        el.classList.toggle('sl-past', i < index); el.classList.toggle('sl-active', i === index); el.classList.toggle('sl-future', i > index);
+        const el = this.els[i], state = this.hasParts ? lineState(this.lines[i], position) : (i < index ? -1 : i === index ? 2 : 1);
+        el.classList.toggle('sl-past', state < 0); el.classList.toggle('sl-active', state === 2); el.classList.toggle('sl-future', state > 0);
       }
       this.center(!initial);
     }
@@ -1307,10 +1319,11 @@
       this.note.hidden = this.synced;
       this.linesBox.classList.toggle('sl-seekable', this.seekable);
       this.linesBox.classList.toggle('sl-static', !this.synced);
+      this.hasParts = this.lines.some(l => l.part !== undefined);
       const fragment = document.createDocumentFragment();
       this.els = this.lines.map((line, i) => {
-        const el = h('div', { class: 'sl-line' + (line.text ? '' : ' sl-empty'), 'data-i': i, dir: 'auto' },
-          h('div', { class: 'sl-text' + hangClass(line.text) }, line.text),
+        const el = h('div', { class: 'sl-line' + (line.text ? '' : ' sl-empty') + (line.part_marker !== undefined ? ' sl-part' : '') + (line.alt ? ' sl-alt' : ''), 'data-i': i, dir: 'auto' },
+          h('div', { class: 'sl-text' + hangClass(line.alt ? '' : line.part_marker !== undefined ? line.part_marker : line.text) }, line.part_marker !== undefined ? line.part_marker : line.text),
           showTranslation && line.text && line.translated_text ? h('div', { class: 'sl-trans' + hangClass(line.translated_text) }, line.translated_text) : null);
         fragment.append(el);
         return el;
@@ -1370,14 +1383,17 @@
       const index = Core.lyricsIndex(this.app.engine.lyrics, position);
       if (index !== this.active) {
         const previous = this.active;
-        if (initial || previous < -1) {
-          this.els.forEach((el, i) => { el.classList.toggle('sl-past', i < index); el.classList.toggle('sl-active', i === index); el.classList.toggle('sl-future', i > index); });
-        } else {
+        /* Multi-voice lyrics light every part's current line at once: state comes from
+         * each line's own window (part_end), and any part can end on another's move —
+         * repaint everything. Single-voice lyrics keep the changed-range fast path. */
+        const paint = (el, i) => {
+          const state = this.hasParts ? lineState(this.lines[i], position) : (i < index ? -1 : i === index ? 2 : 1);
+          el.classList.toggle('sl-past', state < 0); el.classList.toggle('sl-active', state === 2); el.classList.toggle('sl-future', state > 0);
+        };
+        if (initial || previous < -1 || this.hasParts) this.els.forEach(paint);
+        else {
           const lo = Math.max(0, Math.min(previous, index)), hi = Math.min(this.els.length - 1, Math.max(previous, index));
-          for (let i = lo; i <= hi; i++) {
-            const el = this.els[i];
-            el.classList.toggle('sl-past', i < index); el.classList.toggle('sl-active', i === index); el.classList.toggle('sl-future', i > index);
-          }
+          for (let i = lo; i <= hi; i++) paint(this.els[i], i);
         }
         if (this.fill.line >= 0 && this.fill.line !== index) this.fill.unwrap();
         this.active = index;

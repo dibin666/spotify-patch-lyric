@@ -177,6 +177,12 @@ html:not(.sl-official-lyrics) [data-testid="lyrics-button"] { display: none !imp
 @supports (text-spacing-trim: trim-start) { .sl-hang { text-spacing-trim: trim-start; } }
 @supports not (text-spacing-trim: trim-start) { .sl-hang { text-indent: -.5em; } }
 .sl-line.sl-empty { margin-bottom: 0; }
+/* Multi-voice (duet) lyrics: a 【name】tag line renders as a small section label;
+ * lines of overlapping secondary parts align to the opposite side. */
+.sl-line.sl-part { margin-top: .5em; margin-bottom: .1em; }
+.sl-line.sl-part .sl-text { font-size: .42em; font-weight: 500; opacity: .55; letter-spacing: .04em; }
+.sl-line.sl-part .sl-trans { font-size: .42em; opacity: .5; }
+.sl-line.sl-alt .sl-text, .sl-line.sl-alt .sl-trans { text-align: end; }
 .sl-text { display: block; }
 .sl-trans { display: block; opacity: .7; font-size: .6em; font-weight: 400; }
 .sl-line.sl-active { color: var(--lyrics-color-active); }
@@ -223,6 +229,9 @@ html:not(.sl-official-lyrics) [data-testid="lyrics-button"] { display: none !imp
   font-size: calc(var(--sl-mini-font) * var(--sl-scale));
 }
 .sl-mini .sl-line { margin-bottom: .65em; }
+.sl-mini .sl-line.sl-part { margin-top: .6em; margin-bottom: .15em; }
+.sl-mini .sl-line.sl-part .sl-text { font-size: .7em; }
+.sl-mini .sl-line.sl-part .sl-trans { font-size: .6em; }
 .sl-mini .sl-trans { font-size: .72em; margin-top: .15em; }
 .sl-mini-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; text-align: center;
   font: 400 .875rem/1.4 var(--encore-body-font-stack, sans-serif); color: var(--lyrics-color-active); opacity: .75; }
