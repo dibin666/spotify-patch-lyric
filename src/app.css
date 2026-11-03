@@ -1,5 +1,11 @@
 /* Spot-Lyric for Spotify — mirrors the metrics of Spotify's own lyrics view. */
 
+/* ---------- Spotify's own lyrics UI ---------- */
+/* The "歌词预览" card in the Now Playing view is always removed: this plugin replaces it. */
+[data-testid="lyrics-npv-section"] { display: none !important; }
+/* The playback-bar lyrics button stays hidden unless enabled in 歌词设置 (sl-official-lyrics on <html>). */
+html:not(.sl-official-lyrics) [data-testid="lyrics-button"] { display: none !important; }
+
 /* ---------- entry button (now-playing bar) ---------- */
 .sl-entry { position: relative; }
 .sl-entry .sl-entry-icon { display: inline-flex; align-items: center; justify-content: center; pointer-events: none; }
@@ -204,9 +210,6 @@
   contain: strict;
   color: var(--lyrics-color-active);
 }
-/* Spotify's own lyrics preview card in the same sidebar would only repeat the mini view: hidden
- * while the mini view is there (it comes back when the mini view is closed or the page is open). */
-[data-testid="NPV_Panel_OpenDiv"]:has(.sl-mini) [data-testid="lyrics-npv-section"] { display: none !important; }
 /* Follows playback only (scrolled from script): the wheel keeps scrolling the sidebar itself.
  * At the start the lyrics sit at the top (no top fade); the top fades once they have scrolled. */
 .sl-mini-scroll { position: absolute; inset: 0; overflow: hidden; scrollbar-width: none;

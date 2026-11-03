@@ -106,7 +106,7 @@
   const DEFAULTS = {
     preferred_provider: 'netease', spotify_first: false, prefetch: true, verify_lyrics: true, relay: true,
     translation: true, word_sync: true, mini_player: true, font_scale: 1, color_mode: 'cover', only_eligible: false,
-    server_url: '', server_token: '', comments_plugin: false,
+    official_lyrics_button: false, server_url: '', server_token: '', comments_plugin: false,
   };
   const cleanServerUrl = url => String(url || '').trim().replace(/\/+$/, '');
   class Store {
@@ -349,6 +349,7 @@
     }
     async start() {
       await this.store.open();
+      this.applyOfficialLyrics();
       /* A mode picked in the settings lasts until Spotify is patched with another mode. */
       if (this.store.get('patch_mode', '') !== BAKED_MODE) { this.store.set('mode', undefined); this.store.set('patch_mode', BAKED_MODE); }
       this.engine.cloud = pureLocal() ? null : cloud;
@@ -393,6 +394,10 @@
         reload: () => location.reload(),
       };
       return this._host;
+    }
+    /* Spotify's own playback-bar lyrics button only shows when enabled in the settings. */
+    applyOfficialLyrics() {
+      document.documentElement.classList.toggle('sl-official-lyrics', !!this.store.setting('official_lyrics_button'));
     }
     /* Cloud <-> pure local from the settings panel; the current track is matched again. */
     setMode(mode) {
@@ -1778,6 +1783,7 @@
         toggle('translation', '显示译文'),
         toggle('word_sync', '逐字高亮'),
         toggle('mini_player', '右侧栏迷你歌词', null, () => this.app.mini.refresh()),
+        toggle('official_lyrics_button', '官方歌词按钮', '显示 Spotify 自带的歌词按钮', () => app.applyOfficialLyrics()),
         segmented('font_scale', '字号', [[0.8, '小'], [1, '标准'], [1.2, '大']]),
         segmented('color_mode', '背景', [['cover', '封面取色'], ['blur', '封面模糊'], ['dark', '深色']]),
         h('h3', null, '时间校准'),
