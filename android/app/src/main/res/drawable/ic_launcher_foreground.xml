@@ -1,0 +1,8 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- 音符图标 -->
+    <path
+        android:fillColor="#1ED760"
+        android:pathData="M72,26 L44,32 L44,66 A10,10 0 0,0 34,62 A10,10 0 0,0 44,74 A10,10 0 0,0 52,66 L52,44 L72,38 L72,58 A10,10 0 0,0 62,54 A10,10 0 0,0 72,66 A10,10 0 0,0 80,58 L80,26 Z" />
+</vector>

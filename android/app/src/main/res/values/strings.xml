@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Spot-Lyric</string>
+    <string name="module_desc">无缝注入 Spotify 原生歌词界面的第三方歌词源</string>
+    <string name="status_title">注入状态</string>
+    <string name="module_active">模块已激活</string>
+    <string name="module_inactive">未激活 — 请在 LSPosed 中启用并勾选 Spotify</string>
+    <string name="section_general">歌词注入</string>
+    <string name="section_sources">歌词来源</string>
+    <string name="section_server">云端服务器</string>
+    <string name="section_status">实时状态</string>
+    <string name="pref_enabled">启用歌词注入</string>
+    <string name="pref_fallback">无匹配时回退官方歌词</string>
+    <string name="pref_word_sync">优先逐字歌词</string>
+    <string name="pref_translation">显示翻译/罗马音</string>
+    <string name="pref_server_url">服务器地址</string>
+    <string name="pref_server_mode">服务器模式</string>
+    <string name="server_off">关闭(纯本地)</string>
+    <string name="server_bindings">读取共享匹配库</string>
+    <string name="server_relay">经服务器转发上游请求</string>
+    <string name="pref_offset">全局时间偏移(ms)</string>
+    <string name="now_playing">当前曲目</string>
+    <string name="last_source">命中来源</string>
+    <string name="last_sync">同步类型</string>
+    <string name="inject_count">注入次数</string>
+    <string name="no_data">等待 Spotify 播放…</string>
+    <string-array name="xposed_scope">
+        <item>com.spotify.music</item>
+    </string-array>
+</resources>
