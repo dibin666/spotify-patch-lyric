@@ -28,6 +28,8 @@ object Prefs {
     const val ST_LAST_ERROR = "status_last_error"
     const val ST_LAST_TIME = "status_last_time"
     const val ST_SERVER_OK = "status_server_ok"
+    const val ST_RESOLVED_MAP = "status_resolved_map"
+    const val ST_RESOLVED_FROM = "status_resolved_from"
 
     const val SERVER_OFF = "off"
     const val SERVER_BINDINGS = "bindings"

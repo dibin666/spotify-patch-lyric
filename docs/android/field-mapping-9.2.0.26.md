@@ -322,3 +322,35 @@ dex class_def 验证结果:
 - `lyrics_offline_enabled` 若开,DB 命中会短路 onf0 —— 注入期建议关旗标或同时 hook `pmf0`
 - 混淆名版本漂移:所有 `p.*` 名仅 9.2.0.26 有效;`com.spotify.*` 库类名相对稳定但也可变
 - `onf0` 运行期定位:`XposedHelpers.findClass("onf0")` → 枚举/反射 `lnf0.d`/`umf0` 构造参数拿到实例类;或 hook 两实现类
+
+---
+
+## 附录:9.2.0.400 (148376304) 实测映射
+
+Pixel 9 Pro / Android 15 指纹扫描实测(模块已注入验证):
+
+| 角色 | 9.2.0.26 | 9.2.0.400 |
+|---|---|---|
+| `onf0` interface | `p.onf0` | `p.aq70` |
+| onf0 impl(v3) | `p.itf0` | `p.bq70` |
+| onf0 impl(v2) | `p.pnf0` | (并入 bq70 或未检出) |
+| `lnf0` 仓库 | `p.lnf0` | `p.bq70`(与 impl 同类) |
+| `bhf0` has_lyrics | `p.bhf0` | `p.bl9` |
+| `aey0` 旗标 iface | `p.aey0` | `p.nfy0` |
+| aey0 impls | `p.e2t`/`p.f141` | `p.p241`/`p.x2t` |
+| `a9h` | `p.a9h` | `p.e9h` |
+| `fef0` | `p.fef0` | `p.nff0` |
+| `aef0` 行 | `p.aef0` | `p.iff0` |
+| `cef0` 逐字 | `p.cef0` | `p.el70` |
+| `def0` 翻译 | `p.def0` | `p.ah41` |
+| `bef0` 来源 | `p.bef0` | `p.jff0` |
+| `eef0` | `p.eef0` | `p.mff0` |
+| `bff0` 颜色 | `p.bff0` | `p.jgf0` |
+
+混淆规律:.26 → .400 命名空间整体平移(p.*→p.* 同段),但字母序重排;**构造签名与字段形状不变**,指纹全部命中。
+
+### 实测注意事项
+- `ActivityThread.currentApplication()` 在 API 35 反射被禁 → 用 `Activity.onCreate` hook 引导拿 Application context。
+- `ContentResolver.call` 受包可见性限制(Spotify 看不到模块 provider)→ 状态上报改用**显式组件广播**。
+- hook 侧 `getRemotePreferences` 是只读的(写静默丢弃)→ 解析结果持久化走广播→App 写 prefs→下次 hook 读。
+- 反射遍历(指纹扫描)必须对每个类的 `declaredMethods/Fields/Constructors` 加 try/catch —— 部分类签名引用缺失类(RenderNode 等)抛 NoClassDefFoundError。

@@ -51,6 +51,8 @@ class ModuleMain : XposedModule() {
     private lateinit var factory: DomainFactory
     private lateinit var roles: SpotifyIndex.Roles
     private var spotify: Context? = null
+    /* context 可用前挂起的状态 */
+    private val pendingStatus = java.util.concurrent.ConcurrentLinkedQueue<Map<String, Any>>()
 
     private val tracks = ConcurrentHashMap<String, TrackInfo>(8)
     @Volatile private var lastTrack: TrackInfo? = null
@@ -58,16 +60,19 @@ class ModuleMain : XposedModule() {
 
     override fun onPackageReady(param: PackageReadyParam) {
         if (param.packageName != SPOTIFY) return
-        val (vc, vn) = ApkVersion.read(param.applicationInfo.sourceDir)
-        log(Log.INFO, TAG, "spotify ready: $vn($vc)")
         try {
             cfg = config()
+            SpotifyIndex.persistedJson = readPref(Prefs.ST_RESOLVED_MAP) ?: ""
             roles = SpotifyIndex.resolve(param.applicationInfo, param.classLoader)
             factory = DomainFactory(roles)
             install(param)
+            log(Log.INFO, TAG, "spotify ready: ${SpotifyIndex.versionName}(${SpotifyIndex.versionCode}) via ${SpotifyIndex.resolvedFrom}")
             report(mapOf(
                 Prefs.ST_ACTIVE to true,
-                Prefs.ST_SPOTIFY_VERSION to "$vn ($vc)",
+                Prefs.ST_SPOTIFY_VERSION to "${SpotifyIndex.versionName} (${SpotifyIndex.versionCode})".let {
+                    if (SpotifyIndex.versionCode == 0L) "? [${ApkVersion.lastError}]" else it },
+                Prefs.ST_RESOLVED_FROM to SpotifyIndex.resolvedFrom,
+                Prefs.ST_RESOLVED_MAP to SpotifyIndex.pinsJson(roles),
             ))
         } catch (t: Throwable) {
             log(Log.ERROR, TAG, "resolve/install failed", t)
@@ -78,20 +83,44 @@ class ModuleMain : XposedModule() {
     /* ------------------------------------------------ hooks ---- */
 
     private fun install(param: PackageReadyParam) {
-        roles.bhf0?.let { hookBhf(it) }
+        runCatching { roles.bhf0?.let { hookBhf(it) } }
+            .onFailure { log(Log.WARN, TAG, "hookBhf failed", it) }
 
         val impls = roles.onf0Impls.ifEmpty { listOfNotNull(roles.lnf0) }
-        for (impl in impls) hookOnf0(impl)
+        for (impl in impls) runCatching { hookOnf0(impl) }
+            .onFailure { log(Log.WARN, TAG, "hookOnf0(${impl.name}) failed", it) }
 
         if (cfg.flagOverrides) {
-            for (impl in roles.aey0Impls) hookFlags(impl)
-            /* aey0 本身是具体类(非接口)时直接挂 */
-            roles.aey0?.takeIf { !it.isInterface }?.let { hookFlags(it) }
+            for (impl in roles.aey0Impls) runCatching { hookFlags(impl) }
+            roles.aey0?.takeIf { !it.isInterface }?.let { runCatching { hookFlags(it) } }
         }
 
-        roles.lnf0?.let { hookLnf0(it) }
+        /* lnf0 可能与 onf0 impl 同类(指纹误命中)——已在 impls 中挂钩则跳过 */
+        roles.lnf0?.takeIf { it !in roles.onf0Impls }?.let { runCatching { hookLnf0(it) } }
+
+        /* Activity.onCreate 引导:尽早拿到 Application context 供 BridgeProvider 用 */
+        runCatching {
+            val m = android.app.Activity::class.java.getDeclaredMethod("onCreate", android.os.Bundle::class.java)
+            hook(m).intercept { chain ->
+                if (spotify == null) {
+                    ((chain.thisObject as? android.app.Activity)?.application)?.let { app ->
+                        spotify = app
+                        log(Log.INFO, TAG, "context acquired via ${chain.thisObject?.javaClass?.simpleName}")
+                        flushPending()
+                    }
+                }
+                chain.proceed()
+            }
+        }.onFailure { log(Log.WARN, TAG, "activity bootstrap hook failed", it) }
 
         log(Log.INFO, TAG, "hooks: onf0=${roles.onf0Impls.map { it.name }} bhf0=${roles.bhf0?.name} aey0impls=${roles.aey0Impls.map { it.name }}")
+    }
+
+    private fun flushPending() {
+        while (true) {
+            val m = pendingStatus.poll() ?: break
+            report(m)
+        }
     }
 
     /* has_lyrics 判定:捕获曲目元数据 + 强制放行 */
@@ -213,12 +242,16 @@ class ModuleMain : XposedModule() {
 
     /* ------------------------------------------------ 配置/状态 ---- */
 
+    private fun readPref(key: String): String? =
+        try { getRemotePreferences(Prefs.NAME).getString(key, null) } catch (_: Throwable) { null }
+
     private fun context(): Context? {
         spotify?.let { return it }
+        /* currentApplication 是隐藏 API,新系统反射被禁;主要靠 Activity.onCreate 引导 */
         return try {
             val at = Class.forName("android.app.ActivityThread")
             val app = at.getMethod("currentApplication").invoke(null) as? Application
-            app?.also { spotify = it }
+            app?.also { spotify = it; flushPending() }
         } catch (_: Throwable) { null }
     }
 
@@ -264,21 +297,31 @@ class ModuleMain : XposedModule() {
         offsetMs = cfg.offsetMs.toLong(),
     )
 
-    /** 状态回写:remote prefs 为主(无需 Context),BridgeProvider 为辅 */
+    /** 状态回写:BridgeProvider.call 为准(hook 侧 remote prefs 是只读的,写了也静默丢);
+        context 未就绪时挂起,Activity.onCreate 引导后 flush */
+    @Volatile private var statusErrLogged = false
     private fun report(map: Map<String, Any>) {
+        var sent = false
+        val ctx = context()
+        /* 主通道:显式组件广播,不受包可见性限制 */
         try {
-            val p = getRemotePreferences(Prefs.NAME)
-            val e = p.edit()
-            for ((k, v) in map) when (v) {
-                is Boolean -> e.putBoolean(k, v)
-                is Int -> e.putInt(k, v)
-                is Long -> e.putLong(k, v)
-                else -> e.putString(k, v.toString())
-            }
-            e.apply()
+            ctx?.sendBroadcast(android.content.Intent("xyz.spotlyric.mod.STATUS")
+                .setComponent(android.content.ComponentName("xyz.spotlyric.mod", "xyz.spotlyric.mod.data.StatusReceiver"))
+                .putExtra("json", JSONObject(map).toString()))
+            sent = ctx != null
+        } catch (t: Throwable) {
+            if (!statusErrLogged) { statusErrLogged = true; log(Log.WARN, TAG, "status broadcast failed", t) }
+        }
+        /* 辅:provider call(部分环境可见) */
+        if (!sent) try {
+            ctx?.contentResolver?.call(Uri.parse(BRIDGE), "status", JSONObject(map).toString(), null)
+                ?.let { sent = true }
         } catch (_: Throwable) { }
-        try {
-            context()?.contentResolver?.call(Uri.parse(BRIDGE), "status", JSONObject(map).toString(), null)
-        } catch (_: Throwable) { }
+        if (!sent) {
+            pendingStatus.offer(map)
+            while (pendingStatus.size > 20) pendingStatus.poll()
+        } else {
+            flushPending()
+        }
     }
 }

@@ -25,31 +25,34 @@ class DomainFactory(private val r: SpotifyIndex.Roles) {
     private val bef0Ctor: Constructor<*> = r.bef0.declaredConstructors.first {
         it.parameterTypes.size == 3 && it.parameterTypes.all { p -> p == String::class.java }
     }
-    private val eef0Ctor: Constructor<*>? = r.eef0?.let { cls ->
-        cls.declaredConstructors.firstOrNull {
-            it.parameterTypes.size == 1 && it.parameterTypes[0] == Boolean::class.javaPrimitiveType
-        }
-    }
     private val bff0Ctor: Constructor<*> = r.bff0.declaredConstructors.first {
         it.parameterTypes.size == 6 &&
             it.parameterTypes.take(5).all { p -> p == Int::class.javaPrimitiveType } &&
             it.parameterTypes[5] == Boolean::class.javaPrimitiveType
     }
 
-    /* a9h 便捷构造:(List,int,List,String,boolean,bef0,eef0,int,List,bff0);
-       缺失时走 fef0 构造 + a9h(fef0,bff0) */
+    /* a9h 便捷构造:(List,int,List,String,boolean,bef0,?,int,List,bff0);
+       第 7 参 eef0 类型宽松匹配(版本间可能漂移);缺失时走 fef0 + a9h(fef0,bff0) */
     private val a9hEasyCtor: Constructor<*>? = r.a9h.declaredConstructors.firstOrNull {
-        it.parameterTypes.size == 10 &&
-            it.parameterTypes[0] == List::class.java &&
-            it.parameterTypes[1] == Int::class.javaPrimitiveType &&
-            it.parameterTypes[2] == List::class.java &&
-            it.parameterTypes[3] == String::class.java &&
-            it.parameterTypes[4] == Boolean::class.javaPrimitiveType &&
-            it.parameterTypes[5] == r.bef0 &&
-            it.parameterTypes[6] == r.eef0 &&
-            it.parameterTypes[7] == Int::class.javaPrimitiveType &&
-            it.parameterTypes[8] == List::class.java &&
-            it.parameterTypes[9] == r.bff0
+        val p = it.parameterTypes
+        p.size == 10 &&
+            List::class.java.isAssignableFrom(p[0]) &&
+            p[1] == Int::class.javaPrimitiveType &&
+            List::class.java.isAssignableFrom(p[2]) &&
+            p[3] == String::class.java &&
+            p[4] == Boolean::class.javaPrimitiveType &&
+            p[5] == r.bef0 &&
+            (r.eef0 == null || p[6] == r.eef0) &&
+            p[7] == Int::class.javaPrimitiveType &&
+            List::class.java.isAssignableFrom(p[8]) &&
+            p[9] == r.bff0
+    }
+    /* eef0 槽位的实际类型(指纹推导可能与 Roles.eef0 不同) */
+    private val eef0Type: Class<*>? = a9hEasyCtor?.parameterTypes?.get(6) ?: r.eef0
+    private val eef0Ctor: Constructor<*>? = eef0Type?.let { cls ->
+        cls.declaredConstructors.firstOrNull {
+            it.parameterTypes.size == 1 && it.parameterTypes[0] == Boolean::class.javaPrimitiveType
+        }
     }
     private val fef0Ctor: Constructor<*>? = r.fef0.declaredConstructors.firstOrNull {
         it.parameterTypes.size == 9
@@ -84,8 +87,7 @@ class DomainFactory(private val r: SpotifyIndex.Roles) {
         }
 
         val provider = bef0Ctor.newInstance(res.providerId.ifEmpty { res.provider }, res.provider, res.displayName)
-        val vocalRemoval = eef0Ctor?.newInstance(false)
-            ?: defaultInstance(r.eef0) /* eef0 缺失时给默认实例 */
+        val vocalRemoval = eef0Ctor?.newInstance(false) ?: defaultInstance(eef0Type)
         val colors = bff0Ctor.newInstance(
             0xFF353535.toInt(), 0xFF565656.toInt(), 0xFFFFFFFF.toInt(), 0xFFCDCDCD.toInt(), 0xFF1ED760.toInt(), true)
 

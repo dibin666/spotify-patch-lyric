@@ -22,6 +22,15 @@
             android:authorities="xyz.spotlyric.mod.bridge"
             android:exported="true" />
 
+        <!-- 状态广播接收器:显式组件投递,不受包可见性限制 -->
+        <receiver
+            android:name=".data.StatusReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="xyz.spotlyric.mod.STATUS" />
+            </intent-filter>
+        </receiver>
+
         <!-- 兼容旧版 Xposed 管理器的模块标记(新 API 用 META-INF/xposed/*) -->
         <meta-data android:name="xposedmodule" android:value="true" />
         <meta-data android:name="xposeddescription" android:value="@string/module_desc" />

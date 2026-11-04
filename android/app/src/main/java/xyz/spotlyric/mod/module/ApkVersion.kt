@@ -15,13 +15,24 @@ object ApkVersion {
     private const val RES_VERSION_CODE = 0x0101021b
     private const val RES_VERSION_NAME = 0x0101021c
 
-    fun read(apkPath: String): Pair<Long, String> {
+    var lastError = ""
+        private set
+
+    fun read(apkPath: String?): Pair<Long, String> {
+        lastError = ""
+        if (apkPath == null) { lastError = "sourceDir=null"; return 0L to "" }
         try {
             ZipFile(apkPath).use { z ->
-                val e = z.getEntry("AndroidManifest.xml") ?: return 0L to ""
-                z.getInputStream(e).use { return parse(it.readBytes()) }
+                val e = z.getEntry("AndroidManifest.xml") ?: run { lastError = "no manifest entry"; return 0L to "" }
+                z.getInputStream(e).use {
+                    val r = parse(it.readBytes())
+                    if (r.first == 0L) lastError = "parse miss ($apkPath)"
+                    return r
+                }
             }
-        } catch (_: Throwable) { }
+        } catch (t: Throwable) {
+            lastError = "${t.javaClass.simpleName}: ${t.message} ($apkPath)"
+        }
         return 0L to ""
     }
 
@@ -30,6 +41,7 @@ object ApkVersion {
     private fun parse(d: ByteArray): Pair<Long, String> {
         val b = ByteBuffer.wrap(d).order(ByteOrder.LITTLE_ENDIAN)
         if (d.size < 8 || b.short.toInt() and 0xffff != 0x0003) return 0L to ""
+        b.position(8)   /* XML 头 8 字节,chunk 从 8 开始 */
         val strings = ArrayList<String>()
         var resIds = IntArray(0)
         var versionCode = 0L
@@ -51,7 +63,8 @@ object ApkVersion {
                     /* stylesStart */ b.int
                     val utf8 = flags and (1 shl 8) != 0
                     val offsets = IntArray(count) { b.int }
-                    val base = chunkStart + 8 + stringsStart
+                    /* stringsStart 相对 chunk 起始(含 8 字节头) */
+                    val base = chunkStart + stringsStart
                     for (i in 0 until minOf(count, offsets.size)) {
                         val off = base + offsets[i]
                         strings += if (utf8) readUtf8Len(d, off) else readUtf16Len(d, off)
