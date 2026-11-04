@@ -34,7 +34,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun prefs() = getSharedPreferences(Prefs.NAME, Context.MODE_WORLD_READABLE)
+    private fun prefs() = getSharedPreferences(Prefs.NAME, Context.MODE_PRIVATE)
 
     @Composable
     fun SettingsScreen() {
