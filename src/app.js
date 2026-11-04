@@ -1041,24 +1041,37 @@
     enabled() { return this.app.store.setting('mini_player') !== false && !this.app.open; }
     /* Spotify's class names are hashed: the block holding the cover, title and artist is the
      * panel child that contains the track title. The mini view goes right after it, as a
-     * sibling of the cards (same width, same 16px gap). */
+     * sibling of the cards (same width, same 16px gap).
+     * Newer xpui builds dropped the panel testids: the column holding the section cards
+     * (lyrics / artist / ...) is found through a card and the mini view leads it. */
     anchor() {
       const panel = document.querySelector('[data-testid="NPV_Panel_OpenDiv"]');
-      if (!panel) return null;
-      let header = panel.querySelector('[data-testid="context-item-info-title"]');
-      while (header && header.parentElement !== panel) header = header.parentElement;
-      if (!header) header = Array.from(panel.children).find(c => c !== this.el) || null;
-      return header;
+      if (panel) {
+        let header = panel.querySelector('[data-testid="context-item-info-title"]');
+        while (header && header.parentElement !== panel) header = header.parentElement;
+        if (!header) header = Array.from(panel.children).find(c => c !== this.el) || null;
+        return header ? { el: header, place: 'after' } : null;
+      }
+      const card = document.querySelector('[data-testid="lyrics-npv-section"]');
+      if (card && card.parentElement) return { el: card.parentElement, place: 'prepend' };
+      const bio = document.querySelector('[data-testid="npv-artist-bio-button"], [data-testid="npv-artist-link"]');
+      const col = bio && bio.parentElement && bio.parentElement.parentElement;
+      return col ? { el: col, place: 'prepend' } : null;
     }
-    inPlace() { const a = this.anchor(); return !!a && this.el.isConnected && this.el.previousElementSibling === a; }
+    inPlace() {
+      const a = this.anchor();
+      return !!a && this.el.isConnected &&
+        (a.place === 'prepend' ? this.el.parentElement === a.el && !this.el.previousElementSibling
+                               : this.el.previousElementSibling === a.el);
+    }
     attach() {
-      const anchor = this.anchor();
-      if (!anchor) { this.el.remove(); this.sizer.disconnect(); return; }
-      anchor.after(this.el);
+      const a = this.anchor();
+      if (!a) { this.el.remove(); this.sizer.disconnect(); return; }
+      if (a.place === 'prepend') a.el.prepend(this.el); else a.el.after(this.el);
       this.sizer.disconnect();
       this.scrollParent = scrollParent(this.el);
       if (this.scrollParent) this.sizer.observe(this.scrollParent);
-      this.sizer.observe(anchor);
+      this.sizer.observe(a.el);
       this.resize();
       this.update(true);
     }
