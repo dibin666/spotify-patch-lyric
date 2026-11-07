@@ -1560,11 +1560,18 @@
     }
     remove(track) { return this.call('POST', '/api/unbind', { track }); }
     /* Same contract as an Http transport: resolves {status, body, retryAfter, setCookie}.
-     * set_cookie carries the NetEase sign-in cookie across the relay (server >= this version). */
+     * set_cookie carries the NetEase sign-in cookie across the relay (server >= this version).
+     * Newer relays also surface `location` (3xx hops of the sign-in chain) and
+     * `body_base64` (binary payloads like the QQ sign-in QR PNG). */
     async relay(req, signal) {
       const answer = await this.call('POST', '/api/relay', { method: req.method, url: req.url, headers: req.headers || {}, body: req.body == null ? null : String(req.body) }, signal);
       const cookies = Array.isArray(answer.set_cookie) ? answer.set_cookie.filter(c => typeof c === 'string') : undefined;
-      return { status: answer.status | 0, body: typeof answer.body === 'string' ? answer.body : '', retryAfter: answer.retry_after || null, setCookie: cookies };
+      return {
+        status: answer.status | 0, body: typeof answer.body === 'string' ? answer.body : '',
+        retryAfter: answer.retry_after || null, setCookie: cookies,
+        location: typeof answer.location === 'string' ? answer.location : '',
+        bodyBase64: answer.body_base64 === true,
+      };
     }
   }
 

@@ -20,7 +20,7 @@ const HOOK = `
   md5, qrMatrix, weapiBody, rsaSecretKey, normComment, songState, fetchPage, resolveSong,
   jar: () => jar, jarHeader, captureBodyCookie, captureSession, api, accountStatus,
   account: () => account,
-  UI: CommentsUI,
+  UI: CommentsUI, hash33, ptuiCB, qqJar: () => qqJar, qqGet,
   setHost(x) { app = x.app; Core = x.Core; h = x.h; svg = x.svg; toast = x.toast; confirmDialog = x.confirmDialog; },
   setAccount(a) { account = a; },
 };`;
@@ -154,6 +154,25 @@ test('resolveSong returns the bound NetEase song and falls back to search', asyn
   const found = await i.resolveSong();
   assert.ok(found && /^\d+$/.test(found.id), `expected numeric NetEase id, got ${found && found.id}`);
   assert.equal(found.via, 'search');
+});
+
+test('hash33 derives the ptqrtoken checksum', () => {
+  const { hash33 } = sandbox();
+  /* Reference value computed against a real qrsig (the classic e=e*33+c loop). */
+  assert.equal(hash33('aa8ffe9a8fb732eb49720bbcb0b8a16f13058d1c4262d3c29f95a4d4e9eaedace28c41525006d5ebfcff7a57b146b5a36c3745d299fd2afaccd5c63906fe6fa4'), 1758097909);
+  assert.equal(hash33(''), 0);
+  assert.equal(hash33('a'), 97);
+});
+
+test('ptuiCB parses the ptlogin callback tuple', () => {
+  const { ptuiCB } = sandbox();
+  /* the array is built inside the vm context: compare joined, not deepEqual. */
+  assert.equal(ptuiCB("ptuiCB('66','0','','0','二维码未失效。', '')").join('|'), '66|0||0|二维码未失效。|');
+  const ok = ptuiCB("ptuiCB('0','0','https://ssl.ptlogin2.graph.qq.com/check_sig?pttype=2&s_url=x','0','登录成功','nick')");
+  assert.equal(ok[0], '0');
+  assert.match(ok[2], /^https:\/\/ssl\.ptlogin2\.graph\.qq\.com\/check_sig/);
+  assert.equal(ptuiCB('{"code":200}'), null);
+  assert.equal(ptuiCB(''), null);
 });
 
 test('captureSession restores MUSIC_U from the body token when headers were lost', () => {

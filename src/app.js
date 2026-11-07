@@ -291,22 +291,8 @@
     return { status: response.status, body: await response.text(), retryAfter: response.headers.get('retry-after') };
   }
   let relayAllowed = () => true;
-  async function providerTransport(req, signal) {
-    /* A blocked direct attempt is re-probed every 10 minutes (e.g. after a restart with the flag). */
-    if (netState.direct !== false || Date.now() - netState.checked > 600000) {
-      try {
-        const response = await directFetch(req, signal);
-        netState.direct = true; netState.checked = Date.now(); netState.directCount++;
-        return response;
-      } catch (e) {
-        if (signal && signal.aborted) throw new Core.ProviderError('请求已取消', 'cancelled');
-        /* Once direct requests worked, a failure is a real network error, not CORS. */
-        if (netState.direct === true) { const error = new Core.ProviderError('网络错误：' + (e.message || e), 'network'); error.transient = true; throw error; }
-        if (netState.direct !== false) log('direct NetEase / QQ requests are blocked (CORS); relaying through the local service or the lyrics server');
-        netState.direct = false; netState.checked = Date.now();
-      }
-    }
-    /* Local service before the lyrics server, in every mode. */
+  /* Local service before the lyrics server, in every mode. */
+  async function relayed(req, signal) {
     if (localUsable()) {
       try {
         const response = await localRelay.relay(req, signal);
@@ -323,6 +309,27 @@
     if (serverState.relay === false) throw new Core.ProviderError('本机无法直连，本地服务未运行，且歌词服务器未开启转发', 'network');
     netState.serverCount++;
     return cloud.relay(req, signal);
+  }
+  async function providerTransport(req, signal) {
+    /* relayOnly requests (the comments plugin's QQ sign-in chain) always ride
+     * the relay: only there do response cookies, redirects and binary bodies
+     * reach JS — a direct fetch keeps them inside the browser jar. */
+    if (req.relayOnly) return relayed(req, signal);
+    /* A blocked direct attempt is re-probed every 10 minutes (e.g. after a restart with the flag). */
+    if (netState.direct !== false || Date.now() - netState.checked > 600000) {
+      try {
+        const response = await directFetch(req, signal);
+        netState.direct = true; netState.checked = Date.now(); netState.directCount++;
+        return response;
+      } catch (e) {
+        if (signal && signal.aborted) throw new Core.ProviderError('请求已取消', 'cancelled');
+        /* Once direct requests worked, a failure is a real network error, not CORS. */
+        if (netState.direct === true) { const error = new Core.ProviderError('网络错误：' + (e.message || e), 'network'); error.transient = true; throw error; }
+        if (netState.direct !== false) log('direct NetEase / QQ requests are blocked (CORS); relaying through the local service or the lyrics server');
+        netState.direct = false; netState.checked = Date.now();
+      }
+    }
+    return relayed(req, signal);
   }
 
   /* ---------------------------------------------------- application ----- */

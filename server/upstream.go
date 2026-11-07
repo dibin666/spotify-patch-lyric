@@ -6,6 +6,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -15,11 +16,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 var allowedHosts = map[string]bool{
 	"music.163.com": true, "interface.music.163.com": true, "interface3.music.163.com": true,
 	"u.y.qq.com": true, "c.y.qq.com": true, "i.y.qq.com": true,
+	/* QQ sign-in for the comments plugin: NetEase brokers QQ accounts through
+	 * api/sns/authorize -> graph.qq.com -> ptlogin2 (QR flow) -> back/qq. */
+	"graph.qq.com": true, "xui.ptlogin2.qq.com": true,
+	"ssl.ptlogin2.qq.com": true, "ssl.ptlogin2.graph.qq.com": true,
 }
 
 /* The endpoints src/core.js uses (search, song detail, lyrics) plus the exact
@@ -34,6 +40,20 @@ var allowedPaths = map[string]bool{
 	"/eapi/login": true, "/eapi/w/login/cellphone": true, "/eapi/login/token/refresh": true,
 	"/eapi/login/qrcode/unikey": true, "/eapi/login/qrcode/client/login": true,
 	"/weapi/v1/comment/like": true, "/weapi/v1/resource/comments/add": true, "/weapi/v1/resource/comments/delete": true,
+	/* 6-digit PC-login captcha + the NetEase ends of the QQ sign-in chain. */
+	"/eapi/middle/captcha/sent/v1": true, "/api/sns/authorize": true, "/back/qq": true,
+}
+
+/* Paths reachable only on the QQ sign-in hosts: the ptlogin2 QR flow
+ * (xlogin -> ptqrshow -> ptqrlogin -> check_sig) and the OAuth pages it
+ * returns through (authorize/show -> login_jump). */
+var qqSignInHosts = map[string]bool{
+	"graph.qq.com": true, "xui.ptlogin2.qq.com": true,
+	"ssl.ptlogin2.qq.com": true, "ssl.ptlogin2.graph.qq.com": true,
+}
+var qqSignInPaths = map[string]bool{
+	"/cgi-bin/xlogin": true, "/ptqrshow": true, "/ptqrlogin": true, "/check_sig": true,
+	"/oauth2.0/authorize": true, "/oauth2.0/show": true, "/oauth2.0/login_jump": true,
 }
 
 /* Prefixes only allowed on music.163.com: comment reading (dynamic song id in
@@ -53,6 +73,9 @@ func relayAllowed(method, href string) bool {
 	}
 	if u.Scheme != "https" || (u.Port() != "" && u.Port() != "443") || u.User != nil || !allowedHosts[u.Hostname()] {
 		return false
+	}
+	if qqSignInHosts[u.Hostname()] {
+		return qqSignInPaths[u.Path]
 	}
 	if allowedPaths[u.Path] {
 		return true
@@ -83,6 +106,11 @@ type UpstreamResponse struct {
 	Status     int
 	Body       string
 	RetryAfter string
+	/* 3xx Location: sign-in redirect chains are walked hop by hop so the
+	 * session cookies stay inside the relay instead of a browser jar. */
+	Location string
+	/* Body is base64 when the payload is not UTF-8 (the QQ sign-in QR PNG). */
+	BodyBase64 bool
 	/* Set-Cookie headers of the upstream response: the comments plugin's sign-in
 	 * returns the session cookie only there (a browser would store it; relayed
 	 * requests have no jar, so the client keeps the token itself). */
@@ -188,14 +216,21 @@ func newTransport(neteaseRealIP string, qqGap, neteaseGap time.Duration) Transpo
 		if len(data) > maxResponse {
 			return nil, errors.New("响应超过 2 MiB 限制")
 		}
+		/* Binary payloads (the sign-in QR PNG) would not survive the JSON relay
+		 * as a string — hand them over base64-encoded instead. */
+		text, bodyB64 := string(data), false
+		if !utf8.Valid(data) {
+			text = base64.StdEncoding.EncodeToString(data)
+			bodyB64 = true
+		}
 		var cookies []string
 		for _, c := range resp.Header.Values("Set-Cookie") {
 			cookies = append(cookies, truncate(c, 2048))
-			if len(cookies) >= 8 {
+			if len(cookies) >= 16 {
 				break
 			}
 		}
-		return &UpstreamResponse{resp.StatusCode, string(data), resp.Header.Get("Retry-After"), cookies}, nil
+		return &UpstreamResponse{resp.StatusCode, text, resp.Header.Get("Retry-After"), resp.Header.Get("Location"), bodyB64, cookies}, nil
 	}
 
 	/* QQ answers HTTP 200 + code 2001 (empty results) while it throttles this

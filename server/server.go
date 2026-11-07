@@ -541,7 +541,7 @@ func (a *App) relay(ctx context.Context, body obj) (any, error) {
 		}
 		for _, n := range names {
 			if s, ok := h[n].(string); ok {
-				headers[n] = truncate(s, 500)
+				headers[n] = truncate(s, 4096)
 			}
 		}
 	}
@@ -562,7 +562,14 @@ func (a *App) relay(ctx context.Context, body obj) (any, error) {
 	if len(resp.SetCookie) > 0 {
 		cookies = resp.SetCookie
 	}
-	return obj{"status": resp.Status, "body": resp.Body, "retry_after": retry, "set_cookie": cookies}, nil
+	var location, bodyB64 any
+	if resp.Location != "" {
+		location = resp.Location
+	}
+	if resp.BodyBase64 {
+		bodyB64 = true
+	}
+	return obj{"status": resp.Status, "body": resp.Body, "retry_after": retry, "set_cookie": cookies, "location": location, "body_base64": bodyB64}, nil
 }
 
 /* ------------------------------------------------------------ http ---- */

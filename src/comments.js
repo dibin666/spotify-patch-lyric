@@ -447,6 +447,54 @@
     return api('POST', EAPI_HOST + path, { body, headers, signal });
   }
 
+  /* ------------------------------------------------------- QQ sign-in --- */
+  /* NetEase brokers third-party accounts through its SNS channel:
+   * music.163.com/api/sns/authorize?snsType=5 answers a 302 to the QQ OAuth
+   * page (with NetEase's state), and the confirmed login returns through
+   * music.163.com/back/qq, which Set-Cookies the MUSIC_U session.
+   * QQ's own QR flow (ptlogin2) is fully HTTP-driven, so the whole chain can
+   * ride the relay:
+   *   ptqrshow  -> QR PNG + `qrsig` cookie      (the image goes back base64)
+   *   ptqrlogin -> polled with ptqrtoken=hash33(qrsig); ptuiCB('0', ...) hands
+   *                a check_sig link
+   *   check_sig -> 302s through login_jump back to music.163.com/back/qq
+   * Every hop must run through the relay even when direct NetEase access
+   * works: response cookies, redirect targets and binary bodies only reach JS
+   * from the relay — a browser fetch keeps them in the browser jar. */
+  const QQ_TLS = 'https://ssl.ptlogin2.qq.com';
+  const QQ_APPID = '716027609', QQ_DAID = '383', QQ_3AID = '100495085';
+  const QQ_JUMP = 'https://graph.qq.com/oauth2.0/login_jump';
+  /* The pt-session jar: unlike the NetEase jar, every cookie the chain emits
+   * is kept (qrsig, pt_login_sig, pt_*) and forwarded on the next hop. */
+  const qqJar = new Map();
+  const qqCookieHeader = () => [...qqJar.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
+  function qqCapture(list) {
+    for (const line of list || []) {
+      if (typeof line !== 'string') continue;
+      const m = /^([^=;\s]+)=([^;]*)/.exec(line.trim());
+      if (m) { if (m[2]) qqJar.set(m[1], m[2]); else qqJar.delete(m[1]); }
+    }
+  }
+  /* ptqrtoken = hash33(qrsig): the classic ptlogin checksum (e = e*33 + c). */
+  const hash33 = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h + ((h << 5) + s.charCodeAt(i))) & 0x7fffffff; return h; };
+  /* ptqrlogin answers `ptuiCB('code','x','url','x','message','nick')`. */
+  function ptuiCB(body) {
+    if (!/ptuiCB\s*\(/.test(body || '')) return null;
+    const out = [];
+    for (const m of String(body).matchAll(/'((?:[^'\\]|\\.)*)'/g)) out.push(m[1]);
+    return out;
+  }
+  async function qqGet(url, referer) {
+    const headers = { Referer: referer || 'https://graph.qq.com/', Accept: '*/*' };
+    const cookie = qqCookieHeader();
+    if (cookie) headers.Cookie = cookie;
+    const resp = await app.engine.http.request('qq', {
+      method: 'GET', url, headers, body: null, relayOnly: true,
+    }, { retries: 0 });
+    if (resp.setCookie) qqCapture(resp.setCookie);
+    return resp;
+  }
+
   /* -------------------------------------------------------- comments ---- */
   /* songId -> { at, total, hot, list, more, loading, loadingMore, error }.
    * Memory only: closing Spotify clears it; entries older than 2h expire. */
@@ -525,7 +573,7 @@
     constructor() {
       this.active = false; this.song = null; this.gen = 0; this.pollTimer = 0;
       this.buildPage();
-      this.loginDialog = null; this.loginTab = 'qr'; this.qr = { key: '', stopped: true };
+      this.loginDialog = null; this.loginTab = 'qr'; this.qr = { key: '', stopped: true }; this.qq = { stopped: true };
       /* Track changes while the comments tab is active reload the area. */
       this.key = '';
       this.pollTimer = setInterval(() => { if (this.active) this.checkTrack(); }, 1500);
@@ -829,15 +877,16 @@
       this.loginErr = h('p', { class: 'slc-login-err', role: 'alert' });
       this.loginTabs = {
         qr: h('button', { type: 'button', class: 'sl-chip', onclick: () => this.loginTabShow('qr') }, '扫码登录'),
+        qq: h('button', { type: 'button', class: 'sl-chip', onclick: () => this.loginTabShow('qq') }, 'QQ 登录'),
         phone: h('button', { type: 'button', class: 'sl-chip', onclick: () => this.loginTabShow('phone') }, '手机登录'),
         email: h('button', { type: 'button', class: 'sl-chip', onclick: () => this.loginTabShow('email') }, '邮箱登录'),
       };
       const dialog = h('div', { class: 'sl-dialog slc-login', role: 'dialog', 'aria-modal': 'true' },
         h('button', { type: 'button', class: 'sl-icon-btn slc-x', 'aria-label': '关闭登录窗口', title: '关闭', onclick: () => this.closeLogin() }, svg(ICONS.close)),
         h('h2', { class: 'sl-dialog-title' }, '登录网易云音乐'),
-        h('div', { class: 'slc-login-tabs' }, this.loginTabs.qr, this.loginTabs.phone, this.loginTabs.email),
+        h('div', { class: 'slc-login-tabs' }, this.loginTabs.qr, this.loginTabs.qq, this.loginTabs.phone, this.loginTabs.email),
         this.loginBody, this.loginErr,
-        h('p', { class: 'slc-login-note' }, '登录状态仅保存在本机，用于点赞和发布评论；二维码由网易云音乐生成，请在网易云音乐 App 中扫码确认。'));
+        h('p', { class: 'slc-login-note' }, '登录状态仅保存在本机，用于点赞和发布评论；可用网易云音乐 App 或手机 QQ 扫码完成授权。'));
       const backdrop = h('div', {
         class: 'sl-dialog-backdrop',
         onmousedown: e => { if (e.target === backdrop) this.closeLogin(); },
@@ -851,7 +900,7 @@
       this.loginTabShow('qr');
     }
     closeLogin() {
-      this.qr.stopped = true;
+      this.qr.stopped = true; this.qq.stopped = true;
       const d = this.loginDialog;
       if (!d) return;
       this.loginDialog = null;
@@ -863,8 +912,10 @@
       this.loginTab = tab;
       for (const [k, b] of Object.entries(this.loginTabs)) b.classList.toggle('sl-on', k === tab);
       setText(this.loginErr, '');
+      this.qr.stopped = true; this.qq.stopped = true;
       if (tab === 'qr') this.qrStart();
-      else { this.qr.stopped = true; this.loginBody.replaceChildren(tab === 'phone' ? this.phoneForm() : this.emailForm()); }
+      else if (tab === 'qq') this.qqStart();
+      else this.loginBody.replaceChildren(tab === 'phone' ? this.phoneForm() : this.emailForm());
     }
     loginError(text) { setText(this.loginErr, text || ''); }
     async finishLogin(loginProfile) {
@@ -938,6 +989,109 @@
       };
       session.timer = setTimeout(poll, 1200);
     }
+    /* QQ sign-in: the NetEase QR tab logs in with the NetEase app; this one
+     * runs QQ's own ptlogin QR flow and finishes through back/qq. */
+    async qqStart() {
+      const box = h('div', { class: 'slc-qrbox' });
+      const text = h('p', { class: 'slc-qrtext' }, '正在获取 QQ 登录二维码…');
+      const refresh = h('button', { type: 'button', class: 'sl-btn sl-btn-ghost sl-btn-small', style: { display: 'block', margin: '8px auto 0' }, onclick: () => this.qqStart() }, '刷新二维码');
+      this.loginBody.replaceChildren(box, text, refresh);
+      const session = this.qq = { stopped: false };
+      qqJar.clear();
+      const fail = e => {
+        if (session.stopped) return;
+        const msg = (e && e.message) || String(e);
+        setText(text, /不允许转发|未开启转发|本地服务未运行|无法直连/.test(msg)
+          ? 'QQ 登录需要新版转发服务，请更新本地服务 / 歌词服务器'
+          : 'QQ 登录失败：' + msg);
+      };
+      try {
+        /* NetEase hands the QQ OAuth address (with its state) via sns/authorize. */
+        const sns = await qqGet(`${NETEASE}/api/sns/authorize?snsType=5&clientType=web2&callbackType=Login&forcelogin=true`, NETEASE + '/');
+        if (session.stopped) return;
+        if (!sns.location) {
+          /* A 302 with no location means the relay is too old to surface
+           * redirects at all — the rest of the chain would fail the same way. */
+          throw new Error(sns.status >= 300 && sns.status < 400
+            ? '转发服务未返回重定向地址，请更新本地服务 / 歌词服务器到最新版本'
+            : `获取授权地址失败（HTTP ${sns.status}）`);
+        }
+        /* Walk the OAuth hops a browser would take so the session cookies
+         * (oauth context, pt_login_sig) land in the jar. The xlogin referer
+         * is the QQ login page address — that is how the pt session learns
+         * which oauth session (client_id + state) it belongs to. */
+        let res = await qqGet(sns.location);
+        const showUrl = res.location || sns.location;
+        if (res.location) res = await qqGet(res.location, sns.location);
+        await qqGet(`https://xui.ptlogin2.qq.com/cgi-bin/xlogin?appid=${QQ_APPID}&daid=${QQ_DAID}&style=33&s_url=${encodeURIComponent(QQ_JUMP)}&pt_3rd_aid=${QQ_3AID}&pt_disable_pwd=1`, showUrl);
+        if (session.stopped) return;
+        /* QR session: ptqrshow returns the PNG (base64 via the relay) and the
+         * qrsig cookie the poll token is derived from. */
+        const show = await qqGet(`${QQ_TLS}/ptqrshow?appid=${QQ_APPID}&e=2&l=M&s=3&d=72&v=4&t=${Math.random().toFixed(16)}&daid=${QQ_DAID}&pt_3rd_aid=${QQ_3AID}`, 'https://xui.ptlogin2.qq.com/');
+        const qrsig = qqJar.get('qrsig');
+        if (session.stopped) return;
+        if (!qrsig) throw new Error('获取二维码失败（缺少 qrsig）');
+        if (!show.bodyBase64 || !show.body) throw new Error('转发服务未返回二维码图片，请更新本地服务 / 歌词服务器到最新版本');
+        box.replaceChildren(h('img', { src: 'data:image/png;base64,' + show.body, alt: 'QQ 登录二维码', style: { display: 'block', width: '100%', height: '100%', imageRendering: 'pixelated' } }));
+        setText(text, '打开手机 QQ，扫码并确认授权');
+        session.deadline = Date.now() + 3 * 60 * 1000;
+        const u1 = encodeURIComponent(QQ_JUMP), loginSig = encodeURIComponent(qqJar.get('pt_login_sig') || '');
+        const t0 = Date.now();
+        /* Poll: ptuiCB codes 65 expired / 66 waiting / 67 scanned / 68 cancelled / 0 confirmed. */
+        let dead = 0;
+        const poll = async () => {
+          if (session.stopped || this.loginTab !== 'qq') return;
+          if (Date.now() > session.deadline) { setText(text, '二维码已过期，请点击下方刷新'); session.stopped = true; return; }
+          try {
+            const res = await qqGet(`${QQ_TLS}/ptqrlogin?u1=${u1}&ptqrtoken=${hash33(qrsig)}&ptredirect=0&h=1&t=1&g=1&from_ui=1&ptlang=2052&action=0-0-${Date.now() - t0}&js_ver=24080801&login_sig=${loginSig}&pt_uistyle=40&aid=${QQ_APPID}&daid=${QQ_DAID}&pt_3rd_aid=${QQ_3AID}&has_onekey=1`, 'https://xui.ptlogin2.qq.com/');
+            if (session.stopped) return;
+            dead = 0;
+            const args = ptuiCB(res.body);
+            if (args && args.length) {
+              const code = args[0];
+              if (code === '0') { this.qqFinish(args[2] || '', session); return; }
+              if (code === '67') setText(text, '已扫码，请在手机 QQ 上确认授权');
+              else if (code === '65') { setText(text, '二维码已过期，请点击下方刷新'); session.stopped = true; return; }
+              else if (code === '68') setText(text, '已取消授权，请重新扫码');
+            }
+          } catch (_) {
+            /* Old relays reject the ptlogin paths outright; real outages are
+             * transient — stop only when the transport keeps failing. */
+            if (++dead >= 6) { setText(text, '无法通过转发服务连接 QQ，请更新本地服务 / 歌词服务器到最新版本'); session.stopped = true; return; }
+          }
+          if (!session.stopped) session.timer = setTimeout(poll, 2000);
+        };
+        session.timer = setTimeout(poll, 1000);
+      } catch (e) { fail(e); }
+    }
+    /* The confirmed scan hands a check_sig link whose redirect chain runs
+     * login_jump -> music.163.com/back/qq (MUSIC_U in Set-Cookie) ->
+     * back/sns?token=... — every hop through the relay, one after another. */
+    async qqFinish(checkSig, session) {
+      try {
+        let url = checkSig, lastLoc = 'https://xui.ptlogin2.qq.com/';
+        for (let i = 0; url && i < 8 && !session.stopped; i++) {
+          const res = await qqGet(url, lastLoc);
+          if (res.location) lastLoc = res.location;
+          if (qqJar.get('MUSIC_U') || !res.location) break;
+          url = res.location;
+        }
+        /* The session arrives as the back/qq Set-Cookie; when a relay strips
+         * it, the final back/sns address still carries the same token. */
+        let musicU = qqJar.get('MUSIC_U');
+        if (!musicU) { const m = /[?&]token=([0-9a-f]+)/i.exec(lastLoc); if (m) musicU = m[1]; }
+        if (!musicU) throw new Error('未获取到登录凭证（MUSIC_U）');
+        jar.set('MUSIC_U', musicU);
+        const csrf = qqJar.get('__csrf'); if (csrf) jar.set('__csrf', csrf);
+        this.finishLogin();
+      } catch (e) {
+        if (session.stopped) return;
+        const msg = (e && e.message) || String(e);
+        this.loginError(/不允许转发|未开启转发|本地服务未运行|无法直连/.test(msg)
+          ? 'QQ 登录需要新版转发服务，请更新本地服务 / 歌词服务器'
+          : 'QQ 登录失败：' + msg);
+      }
+    }
     phoneForm() {
       this._phoneMode = this._phoneMode || 'password';
       const phone = h('input', { class: 'sl-input', type: 'tel', placeholder: '手机号', autocomplete: 'tel' });
@@ -964,12 +1118,23 @@
       if (!/^1\d{10}$/.test((phone || '').trim())) { this.loginError('请输入 11 位手机号'); return; }
       this.loginError('');
       try {
-        /* Plaintext endpoint: the weapi captcha variants reject anonymous
-         * params, while /api/sms/captcha/sent answers {code:200,data:true}. */
-        const { data } = await api('POST', `${NETEASE}/api/sms/captcha/sent`, {
-          body: `cellphone=${encodeURIComponent(phone.trim())}&ctcode=86`,
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        });
+        /* secrete=music_middleuser_pclogin is the PC-login SMS channel: it
+         * issues the 6-digit code login/cellphone verifies, where the plain
+         * channel only sends a 4-digit one. The v1 endpoint rides the same
+         * eapi transport as sign-in; relays too old to allow-list it fall
+         * back to the plaintext variant (now carrying the same secrete). */
+        let data;
+        try {
+          ({ data } = await eapi('/eapi/middle/captcha/sent/v1', {
+            ctcode: '86', secrete: 'music_middleuser_pclogin', cellphone: phone.trim(), scene: '0',
+          }));
+        } catch (e) {
+          if (e instanceof Core.ProviderError && e.kind === 'cancelled') throw e;
+          ({ data } = await api('POST', `${NETEASE}/api/sms/captcha/sent`, {
+            body: `cellphone=${encodeURIComponent(phone.trim())}&ctcode=86&secrete=music_middleuser_pclogin`,
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          }));
+        }
         if (data && (data.code === 200 || data.code === 0)) toast('验证码已发送');
         else this.loginError('发送失败：' + (data && (data.message || data.msg) || '请稍后重试'));
       } catch (e) { this.loginError('发送失败：' + (e.message || e)); }

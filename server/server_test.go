@@ -37,6 +37,23 @@ func TestRelayAllowed(t *testing.T) {
 		{"POST", "https://music.163.com/weapi/w/nuser/account/get", true},
 		{"GET", "https://u.y.qq.com/api/v1/resource/comments/x", false},
 		{"GET", "https://music.163.com/api/v2/other", false},
+		/* 6-digit PC-login captcha + QQ sign-in chain */
+		{"POST", "https://interface3.music.163.com/eapi/middle/captcha/sent/v1", true},
+		{"GET", "https://music.163.com/api/sns/authorize?snsType=5&clientType=web2&callbackType=Login&forcelogin=true", true},
+		{"GET", "https://music.163.com/back/qq?code=x&state=y", true},
+		{"GET", "https://graph.qq.com/oauth2.0/authorize?client_id=100495085", true},
+		{"GET", "https://graph.qq.com/oauth2.0/show?which=Login", true},
+		{"GET", "https://graph.qq.com/oauth2.0/login_jump", true},
+		{"GET", "https://xui.ptlogin2.qq.com/cgi-bin/xlogin?appid=716027609", true},
+		{"GET", "https://ssl.ptlogin2.qq.com/ptqrshow?appid=716027609", true},
+		{"GET", "https://ssl.ptlogin2.qq.com/ptqrlogin?u1=x", true},
+		{"GET", "https://ssl.ptlogin2.graph.qq.com/check_sig?pttype=2", true},
+		/* QQ sign-in paths stay scoped to the sign-in hosts */
+		{"GET", "https://graph.qq.com/api/song/lyric", false},
+		{"GET", "https://ssl.ptlogin2.qq.com/api/login/qrcode/unikey", false},
+		{"GET", "https://u.y.qq.com/ptqrshow?appid=716027609", false},
+		{"GET", "http://ssl.ptlogin2.qq.com/ptqrshow", false},
+		{"DELETE", "https://ssl.ptlogin2.qq.com/ptqrlogin", false},
 	}
 	for _, c := range cases {
 		if got := relayAllowed(c.method, c.url); got != c.want {
@@ -55,7 +72,10 @@ func TestRelayThroughApp(t *testing.T) {
 	cfg := loadConfig(func(k string) (string, bool) { return "", false })
 	cfg.DataDir = t.TempDir()
 	fake := func(_ context.Context, r UpstreamRequest) (*UpstreamResponse, error) {
-		return &UpstreamResponse{Status: 200, Body: `{"code":200,"url":"` + r.URL + `"}`}, nil
+		return &UpstreamResponse{
+			Status: 302, Body: "aGk=", Location: "https://graph.qq.com/oauth2.0/authorize?x=1", BodyBase64: true,
+			SetCookie: []string{"qrsig=abc; Path=/"},
+		}, nil
 	}
 	app := NewApp(cfg, &DirBucket{dir: cfg.DataDir}, fake)
 	defer app.Close()
@@ -73,8 +93,10 @@ func TestRelayThroughApp(t *testing.T) {
 		_ = json.Unmarshal(data, &out)
 		return resp.StatusCode, out
 	}
-	if code, out := post(`{"method":"GET","url":"https://music.163.com/api/song/lyric?id=7"}`); code != 200 || out["status"] != float64(200) {
+	if code, out := post(`{"method":"GET","url":"https://music.163.com/api/song/lyric?id=7"}`); code != 200 || out["status"] != float64(302) {
 		t.Errorf("allowed relay: %d %v", code, out)
+	} else if out["location"] != "https://graph.qq.com/oauth2.0/authorize?x=1" || out["body_base64"] != true || out["set_cookie"] == nil {
+		t.Errorf("relay did not surface location/body_base64/set_cookie: %v", out)
 	}
 	if code, _ := post(`{"method":"GET","url":"https://evil.example/api/song/lyric"}`); code != 400 {
 		t.Errorf("evil host: %d", code)
