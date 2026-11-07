@@ -20,7 +20,7 @@ const HOOK = `
   md5, qrMatrix, weapiBody, rsaSecretKey, normComment, songState, fetchPage, resolveSong,
   jar: () => jar, jarHeader, captureBodyCookie, captureSession, api, accountStatus,
   account: () => account,
-  UI: CommentsUI, hash33, ptuiCB, qqJar: () => qqJar, qqGet,
+  UI: CommentsUI, hash33, ptuiCB, qqJar: () => qqJar, qqGet, qqPost, qqUuid,
   setHost(x) { app = x.app; Core = x.Core; h = x.h; svg = x.svg; toast = x.toast; confirmDialog = x.confirmDialog; },
   setAccount(a) { account = a; },
 };`;
@@ -162,6 +162,9 @@ test('hash33 derives the ptqrtoken checksum', () => {
   assert.equal(hash33('aa8ffe9a8fb732eb49720bbcb0b8a16f13058d1c4262d3c29f95a4d4e9eaedace28c41525006d5ebfcff7a57b146b5a36c3745d299fd2afaccd5c63906fe6fa4'), 1758097909);
   assert.equal(hash33(''), 0);
   assert.equal(hash33('a'), 97);
+  /* seed 5381 makes it the oauth g_tk over p_skey (getToken in qlogin_v2.js). */
+  assert.equal(hash33('', 5381), 5381);
+  assert.equal(hash33('a', 5381), 5381 * 33 + 97);
 });
 
 test('ptuiCB parses the ptlogin callback tuple', () => {

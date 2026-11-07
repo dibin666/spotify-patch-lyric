@@ -475,8 +475,11 @@
       if (m) { if (m[2]) qqJar.set(m[1], m[2]); else qqJar.delete(m[1]); }
     }
   }
-  /* ptqrtoken = hash33(qrsig): the classic ptlogin checksum (e = e*33 + c). */
-  const hash33 = s => { let h = 0; for (let i = 0; i < s.length; i++) h = (h + ((h << 5) + s.charCodeAt(i))) & 0x7fffffff; return h; };
+  /* ptqrtoken = hash33(qrsig, 0): the classic ptlogin checksum (e = e*33 + c).
+   * With seed 5381 it is also g_tk, the oauth CSRF token over p_skey. */
+  const hash33 = (s, seed) => { let h = seed | 0; for (let i = 0; i < s.length; i++) h = (h + ((h << 5) + s.charCodeAt(i))) & 0x7fffffff; return h; };
+  /* The `ui` value the authorize POST expects (same x-x-4x-yx format getUuid makes). */
+  const qqUuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16).toUpperCase(); });
   /* ptqrlogin answers `ptuiCB('code','x','url','x','message','nick')`. */
   function ptuiCB(body) {
     if (!/ptuiCB\s*\(/.test(body || '')) return null;
@@ -484,16 +487,19 @@
     for (const m of String(body).matchAll(/'((?:[^'\\]|\\.)*)'/g)) out.push(m[1]);
     return out;
   }
-  async function qqGet(url, referer) {
+  async function qqRequest(method, url, referer, body) {
     const headers = { Referer: referer || 'https://graph.qq.com/', Accept: '*/*' };
+    if (body != null) headers['Content-Type'] = 'application/x-www-form-urlencoded';
     const cookie = qqCookieHeader();
     if (cookie) headers.Cookie = cookie;
     const resp = await app.engine.http.request('qq', {
-      method: 'GET', url, headers, body: null, relayOnly: true,
+      method, url, headers, body: body == null ? null : body, relayOnly: true,
     }, { retries: 0 });
     if (resp.setCookie) qqCapture(resp.setCookie);
     return resp;
   }
+  const qqGet = (url, referer) => qqRequest('GET', url, referer);
+  const qqPost = (url, body, referer) => qqRequest('POST', url, referer, body);
 
   /* -------------------------------------------------------- comments ---- */
   /* songId -> { at, total, hot, list, more, loading, loadingMore, error }.
@@ -1019,9 +1025,13 @@
         /* Walk the OAuth hops a browser would take so the session cookies
          * (oauth context, pt_login_sig) land in the jar. The xlogin referer
          * is the QQ login page address — that is how the pt session learns
-         * which oauth session (client_id + state) it belongs to. */
+         * which oauth session (client_id + state) it belongs to. The URLs are
+         * kept on the session: qqFinish replays the parent page's authorize
+         * POST with this transaction's params. */
+        session.authUrl = sns.location;
         let res = await qqGet(sns.location);
         const showUrl = res.location || sns.location;
+        session.showUrl = showUrl;
         if (res.location) res = await qqGet(res.location, sns.location);
         await qqGet(`https://xui.ptlogin2.qq.com/cgi-bin/xlogin?appid=${QQ_APPID}&daid=${QQ_DAID}&style=33&s_url=${encodeURIComponent(QQ_JUMP)}&pt_3rd_aid=${QQ_3AID}&pt_disable_pwd=1`, showUrl);
         if (session.stopped) return;
@@ -1064,22 +1074,69 @@
         session.timer = setTimeout(poll, 1000);
       } catch (e) { fail(e); }
     }
-    /* The confirmed scan hands a check_sig link whose redirect chain runs
-     * login_jump -> music.163.com/back/qq (MUSIC_U in Set-Cookie) ->
-     * back/sns?token=... — every hop through the relay, one after another. */
+    /* The confirmed scan hands a check_sig link. In a browser the xlogin iframe
+     * walks it: check_sig sets the pt session (uin/skey/p_skey) and lands on
+     * login_jump — a 200 postMessage page where the HTTP redirect chain ends.
+     * The parent window then converts the pt session into an OAuth code by
+     * POSTing oauth2.0/authorize with from_ptlogin=1 (the page's own agree()
+     * form): the answer 302s to back/qq, which Set-Cookies MUSIC_U and 302s
+     * on to back/sns?token=... — the same session token, readable from the URL. */
     async qqFinish(checkSig, session) {
       try {
-        let url = checkSig, lastLoc = 'https://xui.ptlogin2.qq.com/';
+        let url = checkSig, last = 'https://xui.ptlogin2.qq.com/';
         for (let i = 0; url && i < 8 && !session.stopped; i++) {
-          const res = await qqGet(url, lastLoc);
-          if (res.location) lastLoc = res.location;
-          if (qqJar.get('MUSIC_U') || !res.location) break;
-          url = res.location;
+          const res = await qqGet(url, last);
+          if (res.location) { last = new URL(res.location, url).href; url = last; continue; }
+          if (qqJar.get('MUSIC_U')) break;
+          url = '';
+        }
+        if (!qqJar.get('MUSIC_U') && !session.stopped && session.authUrl) {
+          /* The parent-page leg: agree() POSTs the authorize form with the
+           * transaction params of the original authorize address (state
+           * included) plus g_tk derived from the new p_skey. */
+          const q = new URL(session.authUrl).searchParams;
+          const body = `response_type=${encodeURIComponent(q.get('response_type') || 'code')}` +
+            `&client_id=${encodeURIComponent(q.get('client_id') || QQ_3AID)}` +
+            `&redirect_uri=${encodeURIComponent(q.get('redirect_uri') || `${NETEASE}/back/qq`)}` +
+            `&scope=${encodeURIComponent(q.get('scope') || '')}` +
+            `&state=${encodeURIComponent(q.get('state') || '')}` +
+            `&switch=${encodeURIComponent(q.get('switch') || '')}` +
+            `&from_ptlogin=1&src=1&update_auth=1&openapi=1010` +
+            `&g_tk=${hash33(qqJar.get('p_skey') || '', 5381)}` +
+            `&auth_time=${Date.now()}&ui=${qqUuid()}`;
+          const res = await qqPost('https://graph.qq.com/oauth2.0/authorize', body, session.showUrl || 'https://graph.qq.com/');
+          /* The POST normally 302s to back/qq; some stacks answer a 200 with
+           * {ret:0,callback:<url>} instead — accept either. Relative answers
+           * resolve against the authorize address itself. */
+          last = 'https://graph.qq.com/oauth2.0/authorize';
+          let next = res.location || (/"(?:callback|url)"\s*:\s*"(https?:[^"]+)"/.exec(res.body || '') || [])[1] || '';
+          if (!next) {
+            /* Fallback: a logged-in pt session also satisfies a plain GET
+             * authorize — just without forcelogin, which would loop back
+             * to the login page. */
+            const again = new URL(session.authUrl);
+            again.searchParams.delete('forcelogin');
+            const g = await qqGet(again.href, session.showUrl || 'https://graph.qq.com/');
+            next = g.location || '';
+          }
+          for (let i = 0; next && i < 6 && !session.stopped; i++) {
+            /* back/qq answers a relative Location (/back/sns?token=...) —
+             * resolve every hop against the URL that produced it. */
+            next = new URL(next, last).href;
+            /* back/sns carries the token in its address — grabbing the address
+             * is enough, fetching the page itself is neither needed nor allowed. */
+            if (/[?&]token=[0-9a-f]+/i.test(next) || /back\/sns/.test(next)) { last = next; break; }
+            const hop = await qqGet(next, last);
+            const hopLoc = hop.location ? new URL(hop.location, next).href : '';
+            last = hopLoc || next;
+            if (!hopLoc || qqJar.get('MUSIC_U')) break;
+            next = hopLoc;
+          }
         }
         /* The session arrives as the back/qq Set-Cookie; when a relay strips
          * it, the final back/sns address still carries the same token. */
         let musicU = qqJar.get('MUSIC_U');
-        if (!musicU) { const m = /[?&]token=([0-9a-f]+)/i.exec(lastLoc); if (m) musicU = m[1]; }
+        if (!musicU) { const m = /[?&]token=([0-9a-f]+)/i.exec(last); if (m) musicU = m[1]; }
         if (!musicU) throw new Error('未获取到登录凭证（MUSIC_U）');
         jar.set('MUSIC_U', musicU);
         const csrf = qqJar.get('__csrf'); if (csrf) jar.set('__csrf', csrf);
@@ -1118,24 +1175,16 @@
       if (!/^1\d{10}$/.test((phone || '').trim())) { this.loginError('请输入 11 位手机号'); return; }
       this.loginError('');
       try {
-        /* secrete=music_middleuser_pclogin is the PC-login SMS channel: it
-         * issues the 6-digit code login/cellphone verifies, where the plain
-         * channel only sends a 4-digit one. The v1 endpoint rides the same
-         * eapi transport as sign-in; relays too old to allow-list it fall
-         * back to the plaintext variant (now carrying the same secrete). */
-        let data;
-        try {
-          ({ data } = await eapi('/eapi/middle/captcha/sent/v1', {
-            ctcode: '86', secrete: 'music_middleuser_pclogin', cellphone: phone.trim(), scene: '0',
-          }));
-        } catch (e) {
-          if (e instanceof Core.ProviderError && e.kind === 'cancelled') throw e;
-          ({ data } = await api('POST', `${NETEASE}/api/sms/captcha/sent`, {
-            body: `cellphone=${encodeURIComponent(phone.trim())}&ctcode=86&secrete=music_middleuser_pclogin`,
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          }));
-        }
+        /* secrete/source pick the SMS template: the website's login sends
+         * music_user_login + webMainStation here (a 6-digit code), where the
+         * bare channel only issues a 4-digit one its login endpoint rejects.
+         * code -12 is the risk gate the site answers with a NECaptcha slider. */
+        const { data } = await api('POST', `${NETEASE}/api/sms/captcha/sent`, {
+          body: `cellphone=${encodeURIComponent(phone.trim())}&ctcode=86&secrete=music_user_login&source=webMainStation`,
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        });
         if (data && (data.code === 200 || data.code === 0)) toast('验证码已发送');
+        else if (data && data.code === -12) this.loginError('发送失败：当前环境触发了风控验证，请改用「扫码登录」或「QQ 登录」');
         else this.loginError('发送失败：' + (data && (data.message || data.msg) || '请稍后重试'));
       } catch (e) { this.loginError('发送失败：' + (e.message || e)); }
     }
@@ -1145,11 +1194,21 @@
       if (!secret) { this.loginError(this._phoneMode === 'password' ? '请输入密码' : '请输入验证码'); return; }
       btn.disabled = true; this.loginError('');
       try {
-        /* Desktop-client channel (eapi): the phone login the official app uses.
-         * checkToken is where a slider token would go on the strictest accounts. */
-        const params = { type: '1', phone, remember: 'true', rememberLogin: 'true', https: 'true', countrycode: '86', checkToken: '' };
-        if (this._phoneMode === 'captcha') params.captcha = secret; else params.password = md5(secret);
-        const { data } = await eapi('/eapi/w/login/cellphone', params);
+        let data;
+        if (this._phoneMode === 'captcha') {
+          /* The captcha comes from the website's own channel
+           * (secrete=music_user_login) and verifies on the website login
+           * endpoint — weapi transport, the same channel the page uses. */
+          const body = await weapiBody({ phone, countrycode: '86', captcha: secret, rememberLogin: true, https: true });
+          ({ data } = await api('POST', `${NETEASE}/weapi/login/cellphone?csrf_token=`, {
+            body, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-loginMethod': 'Cellphone' },
+          }));
+        } else {
+          /* Desktop-client channel (eapi): the phone login the official app uses.
+           * checkToken is where a slider token would go on the strictest accounts. */
+          const params = { type: '1', phone, remember: 'true', rememberLogin: 'true', https: 'true', countrycode: '86', checkToken: '', password: md5(secret) };
+          ({ data } = await eapi('/eapi/w/login/cellphone', params));
+        }
         if (data && data.code === 200) { captureSession(data); this.finishLogin(data.profile); return; }
         const msg = (data && (data.message || data.msg)) || `code ${data && data.code}`;
         /* Account-level protection still wins: point at the QR path, which the
