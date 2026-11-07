@@ -194,7 +194,7 @@ func (d *IndexDB) List(q IndexQuery) ([]obj, int, error) {
 		limit = 50
 	}
 	rows, err := d.db.Query(`SELECT `+indexColumns+` FROM bindings`+where+
-		` ORDER BY `+col+` `+dir+`, id ASC LIMIT ? OFFSET ?`,
+		` ORDER BY `+col+` `+dir+`, rowid DESC LIMIT ? OFFSET ?`,
 		append(args, limit, q.Offset)...)
 	if err != nil {
 		return nil, 0, err
